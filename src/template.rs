@@ -5,6 +5,8 @@ use solana_sdk::hash::Hash;
 use solana_sdk::instruction::{AccountMeta, Instruction};
 use solana_sdk::pubkey::Pubkey;
 
+use solana_sdk::message::AddressLookupTableAccount;
+
 use crate::compile::MAX_TX_SIZE;
 use crate::compile::depgraph::topo_sort;
 use crate::compile::markers::MarkerAllocator;
@@ -17,6 +19,7 @@ use crate::spec::TemplateSpec;
 use crate::spec::account::Acc;
 use crate::spec::account::DeriveFn;
 use crate::spec::data::DataPiece;
+use crate::spec::lookup::AddressSource;
 use crate::spec::prefix::AuthoritySource;
 use crate::spec::slot::SlotKind;
 
@@ -373,6 +376,57 @@ impl Template {
             });
         }
 
+        let mut resolved_luts: Vec<AddressLookupTableAccount> = Vec::new();
+        for lut in &spec.luts {
+            let lut_key = match &lut.address {
+                AddressSource::Fixed(pk) => *pk,
+                AddressSource::Slot(name) => {
+                    if let Some(pk) = ctx.slot_sentinels().get(*name) {
+                        *pk
+                    } else {
+                        let sentinel = Pubkey::new_from_array(alloc.pubkey_sentinel());
+                        ctx.slot_sentinels_mut()
+                            .insert((*name).to_string(), sentinel);
+                        slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
+                        per_provider_flags.insert((*name).to_string(), false);
+                        *expected_counts.entry((*name).to_string()).or_insert(0) += 1;
+                        sentinel
+                    }
+                }
+            };
+            let mut lut_addresses: Vec<Pubkey> = Vec::new();
+            for acc in &lut.keys {
+                let pk = resolve_account(acc, &mut ctx, &mut alloc)?;
+                match acc {
+                    Acc::Slot { name, per_provider, .. } => {
+                        slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
+                        per_provider_flags.insert((*name).to_string(), *per_provider);
+                        *expected_counts.entry((*name).to_string()).or_insert(0) += 1;
+                    }
+                    Acc::Derived { name, deps, compute, .. } => {
+                        slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
+                        per_provider_flags.insert((*name).to_string(), false);
+                        computed_meta.push((
+                            (*name).to_string(),
+                            deps.iter().map(|s| (*s).to_string()).collect(),
+                            compute.clone(),
+                        ));
+                        *expected_counts.entry((*name).to_string()).or_insert(0) += 1;
+                    }
+                    Acc::AdditionalSigner { name, .. } => {
+                        slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
+                        *expected_counts.entry((*name).to_string()).or_insert(0) += 1;
+                    }
+                    Acc::Fixed(_, _) | Acc::Payer(_) => {}
+                }
+                lut_addresses.push(pk);
+            }
+            resolved_luts.push(AddressLookupTableAccount {
+                key: lut_key,
+                addresses: lut_addresses,
+            });
+        }
+
         let mut all_pubkey_sentinels: Vec<[u8; 32]> = Vec::new();
         for pk in ctx.slot_sentinels().values() {
             all_pubkey_sentinels.push(pk.to_bytes());
@@ -396,13 +450,23 @@ impl Template {
                 }
             }
         }
+        for lut in &spec.luts {
+            for acc in &lut.keys {
+                if let Acc::Fixed(pk, _) = acc {
+                    let pk_bytes = pk.to_bytes();
+                    if all_pubkey_sentinels.iter().any(|s| s == &pk_bytes) {
+                        return Err(StamperError::FixedPubkeyHitsSentinel { pk: *pk });
+                    }
+                }
+            }
+        }
 
         let sig_count = 1 + additional_signers.len();
         let buf_vec = serialize_placeholder_tx(
             &spec.payer,
             blockhash_sentinel,
             &resolved_ixs,
-            &[],
+            &resolved_luts,
             sig_count,
         )?;
 

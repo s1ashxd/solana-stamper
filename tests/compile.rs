@@ -324,3 +324,61 @@ fn fixed_pubkey_matching_sentinel_is_rejected() {
         tx_stamper::error::StamperError::FixedPubkeyHitsSentinel { .. }
     ));
 }
+
+#[test]
+fn compile_resolves_lut_with_fixed_address_and_fixed_keys() {
+    use solana_sdk::pubkey::Pubkey;
+    use tx_stamper::spec::account::Acc;
+    use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
+    use tx_stamper::spec::{MessageVersion, TemplateSpec};
+    use tx_stamper::template::Template;
+
+    let payer = Pubkey::new_unique();
+    let static_addr_in_lut = Pubkey::new_unique();
+    let lut_address = Pubkey::new_unique();
+    let program = Pubkey::new_unique();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .ix(
+            InstructionSpec::new(program)
+                .account(Acc::fixed(static_addr_in_lut))
+                .data(tx_stamper::spec::data::DataSpec::bytes(&[1, 2, 3])),
+        )
+        .lut(LookupTableSpec {
+            address: AddressSource::Fixed(lut_address),
+            keys: vec![Acc::fixed(static_addr_in_lut)],
+        });
+
+    let tpl = Template::compile(spec).expect("compile failed");
+    let _ = tpl.slot_names();
+}
+
+#[test]
+fn compile_resolves_lut_with_slot_address() {
+    use solana_sdk::pubkey::Pubkey;
+    use tx_stamper::spec::account::Acc;
+    use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
+    use tx_stamper::spec::{MessageVersion, TemplateSpec};
+    use tx_stamper::template::Template;
+
+    let payer = Pubkey::new_unique();
+    let cached_addr = Pubkey::new_unique();
+    let program = Pubkey::new_unique();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .ix(
+            InstructionSpec::new(program)
+                .account(Acc::fixed(cached_addr))
+                .data(tx_stamper::spec::data::DataSpec::bytes(&[7, 7])),
+        )
+        .lut(LookupTableSpec {
+            address: AddressSource::Slot("my_lut"),
+            keys: vec![Acc::fixed(cached_addr)],
+        });
+
+    let tpl = Template::compile(spec).expect("compile failed");
+    let names: Vec<&str> = tpl.slot_names().collect();
+    assert!(names.contains(&"my_lut"), "lut slot not registered, got: {names:?}");
+}

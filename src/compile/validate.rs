@@ -4,6 +4,7 @@ use crate::error::StamperError;
 use crate::spec::TemplateSpec;
 use crate::spec::account::Acc;
 use crate::spec::data::DataPiece;
+use crate::spec::lookup::AddressSource;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Color {
@@ -109,6 +110,46 @@ pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
                 return Err(StamperError::DuplicateSlotName {
                     name: name.to_string(),
                 });
+            }
+        }
+    }
+
+    for lut in &spec.luts {
+        if let AddressSource::Slot(name) = &lut.address
+            && !names.insert(name)
+        {
+            return Err(StamperError::DuplicateSlotName {
+                name: (*name).to_string(),
+            });
+        }
+        for acc in &lut.keys {
+            match acc {
+                Acc::Fixed(_, _) | Acc::Payer(_) => {}
+                Acc::Slot { name, per_provider: pp, .. } => {
+                    if !names.insert(name) {
+                        return Err(StamperError::DuplicateSlotName {
+                            name: (*name).to_string(),
+                        });
+                    }
+                    if *pp {
+                        per_provider.insert(name);
+                    }
+                }
+                Acc::Derived { name, deps, .. } => {
+                    if !names.insert(name) {
+                        return Err(StamperError::DuplicateSlotName {
+                            name: (*name).to_string(),
+                        });
+                    }
+                    computed.insert(name, deps.iter().copied().collect());
+                }
+                Acc::AdditionalSigner { name, .. } => {
+                    if !names.insert(name) {
+                        return Err(StamperError::DuplicateSlotName {
+                            name: (*name).to_string(),
+                        });
+                    }
+                }
             }
         }
     }
