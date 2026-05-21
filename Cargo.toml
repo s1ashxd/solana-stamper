@@ -19,16 +19,18 @@ curve25519-dalek = { version = "4", features = ["precomputed-tables"] }
 sha2 = { version = "0.10", features = ["asm"] }
 base64-simd = "0.8"
 bs58 = "0.5"
+spl-associated-token-account = { version = "8", optional = true }
 
 [dev-dependencies]
 proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-pumpfun = []
-pumpswap = []
-damm-v2 = []
-printr = []
+pumpfun = ["dep:spl-associated-token-account"]
+pumpswap = ["dep:spl-associated-token-account"]
+damm-v2 = ["dep:spl-associated-token-account"]
+printr = ["dep:spl-associated-token-account"]
+all-protocols = ["pumpfun", "pumpswap", "damm-v2", "printr"]
 
 [[bench]]
 name = "stamp"
