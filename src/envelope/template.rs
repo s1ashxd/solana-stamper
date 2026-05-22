@@ -209,4 +209,9 @@ impl EnvelopeTemplate {
         let _ = encoded_len;
         Ok(&out[..])
     }
+
+    #[must_use]
+    pub fn buf_capacity(&self) -> usize {
+        self.buf.capacity()
+    }
 }

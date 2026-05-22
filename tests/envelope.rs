@@ -320,3 +320,26 @@ fn envelope_content_length_after_body_writes_correct_offset() {
     let stamped_b64_len = stamped.as_bytes().len().div_ceil(3) * 4;
     assert_eq!(cl_value, stamped_b64_len);
 }
+
+#[test]
+fn envelope_splice_zero_alloc_on_repeat() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"P=<<BODY>>;".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Base64,
+        },
+        content_length: None,
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let cap_before = env.buf_capacity();
+    let _ = env.splice(&stamped).unwrap();
+    let _ = env.splice(&stamped).unwrap();
+    let cap_after = env.buf_capacity();
+    assert_eq!(cap_before, cap_after);
+}
