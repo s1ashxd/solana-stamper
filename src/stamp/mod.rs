@@ -26,7 +26,8 @@ impl Template {
     }
 }
 
-impl<'t> StampBuilder<'t> {
+impl StampBuilder<'_> {
+    #[must_use]
     pub fn set(mut self, name: &str, v: impl Into<SlotValue>) -> Self {
         self.values.insert(name.to_string(), v.into());
         self
