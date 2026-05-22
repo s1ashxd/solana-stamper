@@ -1,6 +1,32 @@
 use smallvec::SmallVec;
 use tx_stamper::envelope::spec::{BodyEncoding, BodyPlaceholder, ContentLengthSpec, EnvelopeSpec, UserSlot};
 use tx_stamper::envelope::template::EnvelopeTemplate;
+use solana_sdk::hash::Hash;
+use solana_sdk::pubkey::Pubkey;
+use tx_stamper::signer::{KeypairSigner, Signer};
+use tx_stamper::spec::account::Acc;
+use tx_stamper::spec::data::DataSpec;
+use tx_stamper::spec::instruction::InstructionSpec;
+use tx_stamper::spec::{MessageVersion, TemplateSpec};
+use tx_stamper::template::Template;
+
+fn make_stamped() -> tx_stamper::stamped::StampedTx {
+    let signer = KeypairSigner::from_bytes(&[5u8; 32]);
+    let payer = signer.pubkey();
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")),
+    );
+    let tpl = Template::compile(spec).unwrap();
+    tpl.stamp()
+        .set("recipient", Pubkey::new_unique())
+        .set("amount", 1_000u64)
+        .blockhash(Hash::new_from_array([1u8; 32]))
+        .sign(&signer)
+        .unwrap()
+}
 
 #[test]
 fn envelope_spec_construction() {
@@ -72,4 +98,51 @@ fn envelope_compile_missing_body_sentinel_errors() {
         EnvelopeTemplate::compile(spec).err().unwrap(),
         tx_stamper::error::StamperError::EnvelopeBodyMissing
     ));
+}
+
+#[test]
+fn envelope_splice_base64_body() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let stamped = make_stamped();
+    let estimated_b64_len = stamped.as_bytes().len().div_ceil(3) * 4;
+    let spec = EnvelopeSpec {
+        bytes: b"BODY=<<BODY>>;END".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: estimated_b64_len + 8,
+            encoding: BodyEncoding::Base64,
+        },
+        content_length: None,
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let wire = env.splice(&stamped).unwrap();
+    let prefix = &wire[..5];
+    assert_eq!(prefix, b"BODY=");
+    let end = &wire[wire.len() - 4..];
+    assert_eq!(end, b";END");
+    let b64_part = &wire[5..wire.len() - 4];
+    let decoded = base64_simd::STANDARD.decode_to_vec(b64_part).unwrap();
+    assert_eq!(decoded, stamped.as_bytes());
+}
+
+#[test]
+fn envelope_splice_body_too_large_errors() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"<<BODY>>".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 50,
+            encoding: BodyEncoding::Base64,
+        },
+        content_length: None,
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let err = env.splice(&stamped).err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::BodyTooLarge { .. }));
 }
