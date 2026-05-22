@@ -1,10 +1,22 @@
 use std::collections::BTreeMap;
 
 use smallvec::SmallVec;
+use solana_sdk::hash::Hash;
+use solana_sdk::instruction::{AccountMeta, Instruction};
 use solana_sdk::pubkey::Pubkey;
 
 use crate::compile::MAX_TX_SIZE;
+use crate::compile::depgraph::topo_sort;
+use crate::compile::markers::MarkerAllocator;
+use crate::compile::resolve::{ResolveContext, resolve_account};
+use crate::compile::scan::find_all;
+use crate::compile::serialize::serialize_placeholder_tx;
+use crate::compile::validate::validate_spec;
+use crate::error::StamperError;
+use crate::spec::TemplateSpec;
+use crate::spec::account::Acc;
 use crate::spec::account::DeriveFn;
+use crate::spec::data::DataPiece;
 use crate::spec::slot::SlotKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,5 +89,241 @@ impl Template {
 
     pub fn slot_names(&self) -> impl Iterator<Item = &str> {
         self.slot_table.keys().map(String::as_str)
+    }
+
+    pub fn compile(spec: TemplateSpec) -> Result<Self, StamperError> {
+        validate_spec(&spec)?;
+
+        let mut alloc = MarkerAllocator::new();
+        let mut ctx = ResolveContext::new(spec.payer);
+
+        let mut slot_kinds: BTreeMap<String, SlotKind> = BTreeMap::new();
+        let mut per_provider_flags: BTreeMap<String, bool> = BTreeMap::new();
+        let mut computed_meta: Vec<(String, SmallVec<[String; 4]>, DeriveFn)> = Vec::new();
+        let mut additional_signers: SmallVec<[String; 2]> = SmallVec::new();
+
+        let mut u64_sentinels: BTreeMap<String, u64> = BTreeMap::new();
+        let mut u32_sentinels: BTreeMap<String, u32> = BTreeMap::new();
+        let mut u16_sentinels: BTreeMap<String, u16> = BTreeMap::new();
+        let mut u8_sentinels: BTreeMap<String, u8> = BTreeMap::new();
+        let mut pubkey_data_sentinels: BTreeMap<String, [u8; 32]> = BTreeMap::new();
+
+        for sig_name in &spec.additional_signers {
+            let sentinel = alloc.signer_sentinel();
+            ctx.slot_sentinels_mut().insert((*sig_name).to_string(), Pubkey::new_from_array(sentinel));
+            additional_signers.push((*sig_name).to_string());
+            slot_kinds.insert((*sig_name).to_string(), SlotKind::Pubkey);
+        }
+
+        let blockhash_sentinel = Hash::new_from_array(alloc.hash_sentinel());
+        let mut resolved_ixs: Vec<Instruction> = Vec::new();
+
+        for ix in &spec.ixs {
+            let mut metas: Vec<AccountMeta> = Vec::new();
+            for acc in &ix.accounts {
+                let pk = resolve_account(acc, &mut ctx, &mut alloc)?;
+                let (writable, signer) = match acc {
+                    Acc::Fixed(_, f) | Acc::Payer(f) | Acc::AdditionalSigner { flags: f, .. } => {
+                        (f.writable, f.signer)
+                    }
+                    Acc::Slot { flags, name, per_provider } => {
+                        slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
+                        per_provider_flags.insert((*name).to_string(), *per_provider);
+                        (flags.writable, flags.signer)
+                    }
+                    Acc::Derived { flags, name, deps, compute } => {
+                        slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
+                        per_provider_flags.insert((*name).to_string(), false);
+                        computed_meta.push((
+                            (*name).to_string(),
+                            deps.iter().map(|s| (*s).to_string()).collect(),
+                            compute.clone(),
+                        ));
+                        (flags.writable, flags.signer)
+                    }
+                };
+                metas.push(if writable { AccountMeta::new(pk, signer) } else { AccountMeta::new_readonly(pk, signer) });
+            }
+
+            let mut bytes: Vec<u8> = Vec::new();
+            for piece in &ix.data.0 {
+                match piece {
+                    DataPiece::Bytes(b) => bytes.extend_from_slice(b),
+                    DataPiece::U8Slot(n) => {
+                        let mag = *u8_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u8_magic());
+                        slot_kinds.insert((*n).to_string(), SlotKind::U8);
+                        per_provider_flags.insert((*n).to_string(), false);
+                        bytes.push(mag);
+                    }
+                    DataPiece::U16Slot(n) => {
+                        let mag = *u16_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u16_magic());
+                        slot_kinds.insert((*n).to_string(), SlotKind::U16);
+                        per_provider_flags.insert((*n).to_string(), false);
+                        bytes.extend_from_slice(&mag.to_le_bytes());
+                    }
+                    DataPiece::U32Slot(n) => {
+                        let mag = *u32_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u32_magic());
+                        slot_kinds.insert((*n).to_string(), SlotKind::U32);
+                        per_provider_flags.insert((*n).to_string(), false);
+                        bytes.extend_from_slice(&mag.to_le_bytes());
+                    }
+                    DataPiece::U64Slot(n) => {
+                        let mag = *u64_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u64_magic());
+                        slot_kinds.insert((*n).to_string(), SlotKind::U64);
+                        per_provider_flags.insert((*n).to_string(), false);
+                        bytes.extend_from_slice(&mag.to_le_bytes());
+                    }
+                    DataPiece::PubkeySlot(n) => {
+                        let sentinel = *pubkey_data_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.pubkey_sentinel());
+                        slot_kinds.insert((*n).to_string(), SlotKind::Pubkey);
+                        per_provider_flags.insert((*n).to_string(), false);
+                        bytes.extend_from_slice(&sentinel);
+                    }
+                }
+            }
+
+            resolved_ixs.push(Instruction { program_id: ix.program, accounts: metas, data: bytes });
+        }
+
+        let sig_count = 1 + additional_signers.len();
+        let buf_vec = serialize_placeholder_tx(&spec.payer, blockhash_sentinel, &resolved_ixs, &[], sig_count)?;
+
+        let mut buf = [0u8; MAX_TX_SIZE];
+        buf[..buf_vec.len()].copy_from_slice(&buf_vec);
+        let total_len = u16::try_from(buf_vec.len()).expect("len fits in u16");
+        let msg_start_usize = 1 + 64 * sig_count;
+        let msg_start = u16::try_from(msg_start_usize).expect("msg_start fits in u16");
+
+        let blockhash_bytes = blockhash_sentinel.to_bytes();
+        let bh_offsets = find_all(&buf_vec, &blockhash_bytes);
+        let blockhash_off = u16::try_from(
+            *bh_offsets.first().ok_or_else(|| StamperError::SentinelNotFound { name: "blockhash".into() })?,
+        ).expect("bh off fits");
+
+        let mut sig_offs: SmallVec<[u16; 2]> = SmallVec::new();
+        for off in find_all(&buf_vec, &[0xAA; 64]) {
+            sig_offs.push(u16::try_from(off).expect("sig off fits"));
+        }
+        if sig_offs.len() != sig_count {
+            return Err(StamperError::SentinelNotFound { name: "signature".into() });
+        }
+
+        let mut slot_table: BTreeMap<String, PatchSlot> = BTreeMap::new();
+
+        let pubkey_sentinels = ctx.slot_sentinels().clone();
+        for (name, sentinel) in &pubkey_sentinels {
+            let needle = sentinel.to_bytes();
+            let offsets = find_all(&buf_vec, &needle);
+            if offsets.is_empty() {
+                return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            let patches: SmallVec<[PatchOp; 4]> = offsets
+                .into_iter()
+                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::Pubkey32 })
+                .collect();
+            slot_table.insert(
+                name.clone(),
+                PatchSlot {
+                    kind: slot_kinds.get(name).copied().unwrap_or(SlotKind::Pubkey),
+                    patches,
+                    per_provider: per_provider_flags.get(name).copied().unwrap_or(false),
+                },
+            );
+        }
+
+        for (name, sentinel) in &pubkey_data_sentinels {
+            let offsets = find_all(&buf_vec, sentinel);
+            if offsets.is_empty() {
+                return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            let patches: SmallVec<[PatchOp; 4]> = offsets
+                .into_iter()
+                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::Pubkey32 })
+                .collect();
+            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::Pubkey, patches, per_provider: false });
+        }
+
+        for (name, mag) in &u64_sentinels {
+            let offsets = find_all(&buf_vec, &mag.to_le_bytes());
+            if offsets.is_empty() {
+                return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            let patches: SmallVec<[PatchOp; 4]> = offsets
+                .into_iter()
+                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U64 })
+                .collect();
+            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U64, patches, per_provider: false });
+        }
+        for (name, mag) in &u32_sentinels {
+            let offsets = find_all(&buf_vec, &mag.to_le_bytes());
+            if offsets.is_empty() {
+                return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            let patches: SmallVec<[PatchOp; 4]> = offsets
+                .into_iter()
+                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U32 })
+                .collect();
+            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U32, patches, per_provider: false });
+        }
+        for (name, mag) in &u16_sentinels {
+            let offsets = find_all(&buf_vec, &mag.to_le_bytes());
+            if offsets.is_empty() {
+                return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            let patches: SmallVec<[PatchOp; 4]> = offsets
+                .into_iter()
+                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U16 })
+                .collect();
+            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U16, patches, per_provider: false });
+        }
+        for (name, mag) in &u8_sentinels {
+            let offsets = find_all(&buf_vec, &[*mag]);
+            if offsets.is_empty() {
+                return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            let patches: SmallVec<[PatchOp; 4]> = offsets
+                .into_iter()
+                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U8 })
+                .collect();
+            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U8, patches, per_provider: false });
+        }
+
+        let computed_graph: BTreeMap<&str, Vec<&str>> = computed_meta
+            .iter()
+            .map(|(n, deps, _)| (n.as_str(), deps.iter().map(String::as_str).collect()))
+            .collect();
+        let sorted = topo_sort(&computed_graph);
+        let mut computed_ordered: SmallVec<[ComputedSlot; 4]> = SmallVec::new();
+        for name in sorted {
+            if let Some((_, deps, compute)) = computed_meta.iter().find(|(n, _, _)| n == &name) {
+                if let Some(slot) = slot_table.get(&name) {
+                    computed_ordered.push(ComputedSlot {
+                        name: name.clone(),
+                        deps: deps.clone(),
+                        compute: compute.clone(),
+                        patches: slot.patches.clone(),
+                    });
+                }
+            }
+        }
+
+        let per_provider_slots: SmallVec<[String; 4]> = slot_table
+            .iter()
+            .filter(|(_, s)| s.per_provider)
+            .map(|(n, _)| n.clone())
+            .collect();
+
+        Ok(Self {
+            buf,
+            len: total_len,
+            msg_start,
+            blockhash_off,
+            sig_offs,
+            slot_table,
+            computed: computed_ordered,
+            per_provider_slots,
+            payer: spec.payer,
+            additional_signer_names: additional_signers,
+        })
     }
 }

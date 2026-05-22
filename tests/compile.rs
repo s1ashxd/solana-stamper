@@ -199,3 +199,20 @@ fn patch_slot_aggregates_patches() {
     };
     assert_eq!(slot.patches.len(), 2);
 }
+
+#[test]
+fn compile_simple_transfer_spec() {
+    let payer = Pubkey::new_unique();
+    let mut data_prefix = [0u8; 4];
+    data_prefix.copy_from_slice(&2u32.to_le_bytes());
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&data_prefix).u64_slot("amount")),
+    );
+    let tpl = tx_stamper::template::Template::compile(spec).unwrap();
+    assert!(tpl.slot_names().any(|n| n == "recipient"));
+    assert!(tpl.slot_names().any(|n| n == "amount"));
+}
