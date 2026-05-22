@@ -1,4 +1,3 @@
-use smallvec::SmallVec;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::spec::account::Acc;
@@ -12,5 +11,5 @@ pub enum AddressSource {
 #[derive(Clone)]
 pub struct LookupTableSpec {
     pub address: AddressSource,
-    pub keys: SmallVec<[Acc; 64]>,
+    pub keys: Vec<Acc>,
 }

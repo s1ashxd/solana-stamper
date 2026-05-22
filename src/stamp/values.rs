@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
+
 use solana_sdk::pubkey::Pubkey;
+
+use crate::error::StamperError;
 
 #[derive(Default)]
 pub struct ResolvedSlots {
@@ -7,10 +10,19 @@ pub struct ResolvedSlots {
 }
 
 impl ResolvedSlots {
-    #[must_use]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn pubkey(&self, name: &str) -> Pubkey {
-        *self.inner.get(name).expect("slot not resolved")
+    /// Returns the pubkey for the named slot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StamperError::MissingSlotValue`] if the slot has not been resolved.
+    pub fn try_pubkey(&self, name: &str) -> Result<Pubkey, StamperError> {
+        self.inner
+            .get(name)
+            .copied()
+            .ok_or_else(|| StamperError::MissingSlotValue {
+                name: name.to_string(),
+                required_by: Vec::new(),
+            })
     }
 
     pub fn insert(&mut self, name: impl Into<String>, value: Pubkey) {

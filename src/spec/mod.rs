@@ -24,7 +24,7 @@ pub struct TemplateSpec {
     pub additional_signers: SmallVec<[&'static str; 2]>,
     pub prefix: PrefixOptions,
     pub ixs: Vec<InstructionSpec>,
-    pub luts: SmallVec<[LookupTableSpec; 2]>,
+    pub luts: Vec<LookupTableSpec>,
 }
 
 impl TemplateSpec {
@@ -36,7 +36,7 @@ impl TemplateSpec {
             additional_signers: SmallVec::new(),
             prefix: PrefixOptions::default(),
             ixs: Vec::new(),
-            luts: SmallVec::new(),
+            luts: Vec::new(),
         }
     }
 

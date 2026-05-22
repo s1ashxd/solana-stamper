@@ -70,7 +70,7 @@ fn prefix_with_compute_budget() {
 fn lookup_table_address_source() {
     let pk = solana_sdk::pubkey::Pubkey::new_unique();
     let _ = AddressSource::Fixed(pk);
-    let _ = LookupTableSpec { address: AddressSource::Fixed(pk), keys: smallvec::SmallVec::new() };
+    let _ = LookupTableSpec { address: AddressSource::Fixed(pk), keys: Vec::new() };
 }
 
 #[test]
