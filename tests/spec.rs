@@ -2,6 +2,8 @@ use tx_stamper::slot;
 use tx_stamper::spec::slot::SlotKind;
 use tx_stamper::spec::account::{Acc, AccountFlags};
 use tx_stamper::spec::data::{DataSpec, DataPiece};
+use tx_stamper::spec::prefix::{ComputeBudgetSlots, NonceConfig, PrefixOptions, TipTransferSlots, AuthoritySource};
+use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
 use solana_sdk::pubkey::Pubkey;
 
 #[test]
@@ -43,4 +45,28 @@ fn data_spec_chained_builders() {
 fn data_spec_disc_alias() {
     let d = DataSpec::disc(&[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(d.0.len(), 1);
+}
+
+#[test]
+fn prefix_defaults_to_none() {
+    let p = PrefixOptions::default();
+    assert!(p.advance_nonce.is_none());
+    assert!(p.compute_budget.is_none());
+    assert!(p.tip_transfer.is_none());
+}
+
+#[test]
+fn prefix_with_compute_budget() {
+    let p = PrefixOptions::default().with_compute_budget(ComputeBudgetSlots {
+        limit_slot: "cu_limit",
+        price_slot: "cu_price",
+    });
+    assert!(p.compute_budget.is_some());
+}
+
+#[test]
+fn lookup_table_address_source() {
+    let pk = solana_sdk::pubkey::Pubkey::new_unique();
+    let _ = AddressSource::Fixed(pk);
+    let _ = LookupTableSpec { address: AddressSource::Fixed(pk), keys: smallvec::SmallVec::new() };
 }
