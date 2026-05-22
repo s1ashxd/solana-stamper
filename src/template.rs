@@ -81,18 +81,51 @@ pub struct ComputedSlot {
     pub patches: SmallVec<[PatchOp; 4]>,
 }
 
-#[allow(dead_code)]
 pub struct Template {
+    #[allow(dead_code)]
     pub(crate) buf: [u8; MAX_TX_SIZE],
+    #[allow(dead_code)]
     pub(crate) len: u16,
+    #[allow(dead_code)]
     pub(crate) msg_start: u16,
+    #[allow(dead_code)]
     pub(crate) blockhash_off: u16,
+    #[allow(dead_code)]
     pub(crate) sig_offs: SmallVec<[u16; 2]>,
     pub(crate) slot_table: BTreeMap<String, PatchSlot>,
+    #[allow(dead_code)]
     pub(crate) computed: SmallVec<[ComputedSlot; 4]>,
+    #[allow(dead_code)]
     pub(crate) per_provider_slots: SmallVec<[String; 4]>,
     pub(crate) payer: Pubkey,
+    #[allow(dead_code)]
     pub(crate) additional_signer_names: SmallVec<[String; 2]>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn register_sentinel(
+    slot_table: &mut BTreeMap<String, PatchSlot>,
+    buf: &[u8],
+    name: &str,
+    needle: &[u8],
+    patch_kind: PatchKind,
+    slot_kind: SlotKind,
+    expected_count: usize,
+    per_provider: bool,
+) -> Result<(), StamperError> {
+    let offsets = find_all(buf, needle);
+    if offsets.is_empty() {
+        return Err(StamperError::SentinelNotFound { name: name.to_string() });
+    }
+    if offsets.len() != expected_count {
+        return Err(StamperError::MarkerCollision { a: name.to_string(), b: "instruction data".into() });
+    }
+    let patches: SmallVec<[PatchOp; 4]> = offsets
+        .into_iter()
+        .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: patch_kind })
+        .collect();
+    slot_table.insert(name.to_string(), PatchSlot { kind: slot_kind, patches, per_provider });
+    Ok(())
 }
 
 impl Template {
@@ -101,6 +134,16 @@ impl Template {
 
     pub fn slot_names(&self) -> impl Iterator<Item = &str> {
         self.slot_table.keys().map(String::as_str)
+    }
+
+    #[must_use]
+    pub fn additional_signer_names(&self) -> &[String] {
+        &self.additional_signer_names
+    }
+
+    #[must_use]
+    pub fn computed(&self) -> &[ComputedSlot] {
+        &self.computed
     }
 
     #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
@@ -121,11 +164,14 @@ impl Template {
         let mut u8_sentinels: BTreeMap<String, u8> = BTreeMap::new();
         let mut pubkey_data_sentinels: BTreeMap<String, [u8; 32]> = BTreeMap::new();
 
+        let mut expected_counts: BTreeMap<String, usize> = BTreeMap::new();
+
         for sig_name in &spec.additional_signers {
             let sentinel = alloc.signer_sentinel();
             ctx.slot_sentinels_mut().insert((*sig_name).to_string(), Pubkey::new_from_array(sentinel));
             additional_signers.push((*sig_name).to_string());
             slot_kinds.insert((*sig_name).to_string(), SlotKind::Pubkey);
+            *expected_counts.entry((*sig_name).to_string()).or_insert(0) += 1;
         }
 
         let blockhash_sentinel = Hash::new_from_array(alloc.hash_sentinel());
@@ -136,6 +182,7 @@ impl Template {
             ctx.slot_sentinels_mut().insert(nonce_cfg.account_slot.to_string(), nonce_acc_sentinel);
             slot_kinds.insert(nonce_cfg.account_slot.to_string(), SlotKind::Pubkey);
             per_provider_flags.insert(nonce_cfg.account_slot.to_string(), false);
+            *expected_counts.entry(nonce_cfg.account_slot.to_string()).or_insert(0) += 1;
             let authority_pk = match nonce_cfg.authority {
                 AuthoritySource::Payer => spec.payer,
                 AuthoritySource::Fixed(pk) => pk,
@@ -144,6 +191,7 @@ impl Template {
                     ctx.slot_sentinels_mut().insert(name.to_string(), sentinel);
                     slot_kinds.insert(name.to_string(), SlotKind::Pubkey);
                     per_provider_flags.insert(name.to_string(), false);
+                    *expected_counts.entry(name.to_string()).or_insert(0) += 1;
                     sentinel
                 }
             };
@@ -155,10 +203,12 @@ impl Template {
             u32_sentinels.insert(cb.limit_slot.to_string(), limit_mag);
             slot_kinds.insert(cb.limit_slot.to_string(), SlotKind::U32);
             per_provider_flags.insert(cb.limit_slot.to_string(), false);
+            *expected_counts.entry(cb.limit_slot.to_string()).or_insert(0) += 1;
             let price_mag = alloc.u64_magic();
             u64_sentinels.insert(cb.price_slot.to_string(), price_mag);
             slot_kinds.insert(cb.price_slot.to_string(), SlotKind::U64);
             per_provider_flags.insert(cb.price_slot.to_string(), false);
+            *expected_counts.entry(cb.price_slot.to_string()).or_insert(0) += 1;
             resolved_ixs.push(solana_compute_budget_interface::ComputeBudgetInstruction::set_compute_unit_limit(limit_mag));
             resolved_ixs.push(solana_compute_budget_interface::ComputeBudgetInstruction::set_compute_unit_price(price_mag));
         }
@@ -168,10 +218,12 @@ impl Template {
             ctx.slot_sentinels_mut().insert(tip.account_slot.to_string(), tip_acc_sentinel);
             slot_kinds.insert(tip.account_slot.to_string(), SlotKind::Pubkey);
             per_provider_flags.insert(tip.account_slot.to_string(), tip.per_provider);
+            *expected_counts.entry(tip.account_slot.to_string()).or_insert(0) += 1;
             let lam_mag = alloc.u64_magic();
             u64_sentinels.insert(tip.lamports_slot.to_string(), lam_mag);
             slot_kinds.insert(tip.lamports_slot.to_string(), SlotKind::U64);
             per_provider_flags.insert(tip.lamports_slot.to_string(), tip.per_provider);
+            *expected_counts.entry(tip.lamports_slot.to_string()).or_insert(0) += 1;
             resolved_ixs.push(solana_system_interface::instruction::transfer(&spec.payer, &tip_acc_sentinel, lam_mag));
         }
 
@@ -186,6 +238,7 @@ impl Template {
                     Acc::Slot { flags, name, per_provider } => {
                         slot_kinds.insert((*name).to_string(), SlotKind::Pubkey);
                         per_provider_flags.insert((*name).to_string(), *per_provider);
+                        *expected_counts.entry((*name).to_string()).or_insert(0) += 1;
                         (flags.writable, flags.signer)
                     }
                     Acc::Derived { flags, name, deps, compute } => {
@@ -196,6 +249,7 @@ impl Template {
                             deps.iter().map(|s| (*s).to_string()).collect(),
                             compute.clone(),
                         ));
+                        *expected_counts.entry((*name).to_string()).or_insert(0) += 1;
                         (flags.writable, flags.signer)
                     }
                 };
@@ -210,30 +264,35 @@ impl Template {
                         let mag = *u8_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u8_magic());
                         slot_kinds.insert((*n).to_string(), SlotKind::U8);
                         per_provider_flags.insert((*n).to_string(), false);
+                        *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
                         bytes.push(mag);
                     }
                     DataPiece::U16Slot(n) => {
                         let mag = *u16_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u16_magic());
                         slot_kinds.insert((*n).to_string(), SlotKind::U16);
                         per_provider_flags.insert((*n).to_string(), false);
+                        *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
                         bytes.extend_from_slice(&mag.to_le_bytes());
                     }
                     DataPiece::U32Slot(n) => {
                         let mag = *u32_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u32_magic());
                         slot_kinds.insert((*n).to_string(), SlotKind::U32);
                         per_provider_flags.insert((*n).to_string(), false);
+                        *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
                         bytes.extend_from_slice(&mag.to_le_bytes());
                     }
                     DataPiece::U64Slot(n) => {
                         let mag = *u64_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.u64_magic());
                         slot_kinds.insert((*n).to_string(), SlotKind::U64);
                         per_provider_flags.insert((*n).to_string(), false);
+                        *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
                         bytes.extend_from_slice(&mag.to_le_bytes());
                     }
                     DataPiece::PubkeySlot(n) => {
                         let sentinel = *pubkey_data_sentinels.entry((*n).to_string()).or_insert_with(|| alloc.pubkey_sentinel());
                         slot_kinds.insert((*n).to_string(), SlotKind::Pubkey);
                         per_provider_flags.insert((*n).to_string(), false);
+                        *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
                         bytes.extend_from_slice(&sentinel);
                     }
                 }
@@ -270,9 +329,13 @@ impl Template {
         let pubkey_sentinels = ctx.slot_sentinels().clone();
         for (name, sentinel) in &pubkey_sentinels {
             let needle = sentinel.to_bytes();
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
             let offsets = find_all(&buf_vec, &needle);
             if offsets.is_empty() {
                 return Err(StamperError::SentinelNotFound { name: name.clone() });
+            }
+            if offsets.len() != expected {
+                return Err(StamperError::MarkerCollision { a: name.clone(), b: "instruction data".into() });
             }
             let patches: SmallVec<[PatchOp; 4]> = offsets
                 .into_iter()
@@ -289,60 +352,77 @@ impl Template {
         }
 
         for (name, sentinel) in &pubkey_data_sentinels {
-            let offsets = find_all(&buf_vec, sentinel);
-            if offsets.is_empty() {
-                return Err(StamperError::SentinelNotFound { name: name.clone() });
-            }
-            let patches: SmallVec<[PatchOp; 4]> = offsets
-                .into_iter()
-                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::Pubkey32 })
-                .collect();
-            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::Pubkey, patches, per_provider: false });
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
+            register_sentinel(
+                &mut slot_table,
+                &buf_vec,
+                name,
+                sentinel,
+                PatchKind::Pubkey32,
+                SlotKind::Pubkey,
+                expected,
+                false,
+            )?;
         }
 
         for (name, mag) in &u64_sentinels {
-            let offsets = find_all(&buf_vec, &mag.to_le_bytes());
-            if offsets.is_empty() {
-                return Err(StamperError::SentinelNotFound { name: name.clone() });
-            }
-            let patches: SmallVec<[PatchOp; 4]> = offsets
-                .into_iter()
-                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U64 })
-                .collect();
-            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U64, patches, per_provider: false });
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
+            let per_provider = per_provider_flags.get(name).copied().unwrap_or(false);
+            register_sentinel(
+                &mut slot_table,
+                &buf_vec,
+                name,
+                &mag.to_le_bytes(),
+                PatchKind::U64,
+                SlotKind::U64,
+                expected,
+                per_provider,
+            )?;
         }
+
         for (name, mag) in &u32_sentinels {
-            let offsets = find_all(&buf_vec, &mag.to_le_bytes());
-            if offsets.is_empty() {
-                return Err(StamperError::SentinelNotFound { name: name.clone() });
-            }
-            let patches: SmallVec<[PatchOp; 4]> = offsets
-                .into_iter()
-                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U32 })
-                .collect();
-            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U32, patches, per_provider: false });
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
+            let per_provider = per_provider_flags.get(name).copied().unwrap_or(false);
+            register_sentinel(
+                &mut slot_table,
+                &buf_vec,
+                name,
+                &mag.to_le_bytes(),
+                PatchKind::U32,
+                SlotKind::U32,
+                expected,
+                per_provider,
+            )?;
         }
+
         for (name, mag) in &u16_sentinels {
-            let offsets = find_all(&buf_vec, &mag.to_le_bytes());
-            if offsets.is_empty() {
-                return Err(StamperError::SentinelNotFound { name: name.clone() });
-            }
-            let patches: SmallVec<[PatchOp; 4]> = offsets
-                .into_iter()
-                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U16 })
-                .collect();
-            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U16, patches, per_provider: false });
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
+            let per_provider = per_provider_flags.get(name).copied().unwrap_or(false);
+            register_sentinel(
+                &mut slot_table,
+                &buf_vec,
+                name,
+                &mag.to_le_bytes(),
+                PatchKind::U16,
+                SlotKind::U16,
+                expected,
+                per_provider,
+            )?;
         }
+
         for (name, mag) in &u8_sentinels {
-            let offsets = find_all(&buf_vec, &[*mag]);
-            if offsets.is_empty() {
-                return Err(StamperError::SentinelNotFound { name: name.clone() });
-            }
-            let patches: SmallVec<[PatchOp; 4]> = offsets
-                .into_iter()
-                .map(|o| PatchOp { offset: u16::try_from(o).expect("off fits"), kind: PatchKind::U8 })
-                .collect();
-            slot_table.insert(name.clone(), PatchSlot { kind: SlotKind::U8, patches, per_provider: false });
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
+            let per_provider = per_provider_flags.get(name).copied().unwrap_or(false);
+            register_sentinel(
+                &mut slot_table,
+                &buf_vec,
+                name,
+                &[*mag],
+                PatchKind::U8,
+                SlotKind::U8,
+                expected,
+                per_provider,
+            )?;
         }
 
         let computed_graph: BTreeMap<&str, Vec<&str>> = computed_meta

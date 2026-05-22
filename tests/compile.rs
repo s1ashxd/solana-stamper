@@ -268,3 +268,17 @@ fn compile_with_nonce_prefix() {
     let tpl = tx_stamper::template::Template::compile(spec).unwrap();
     assert!(tpl.slot_names().any(|n| n == "nonce_account"));
 }
+
+#[test]
+fn u8_sentinel_collision_detected() {
+    let payer = Pubkey::new_unique();
+    let program = Pubkey::new_unique();
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(program)
+            .account(Acc::payer())
+            .data(DataSpec::bytes(&[0xE0]).u8_slot("x")),
+    );
+    let err = tx_stamper::template::Template::compile(spec).err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::MarkerCollision { .. })
+        || matches!(err, tx_stamper::error::StamperError::SentinelNotFound { .. }));
+}

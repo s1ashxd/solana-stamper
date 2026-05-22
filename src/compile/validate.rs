@@ -5,40 +5,47 @@ use crate::spec::TemplateSpec;
 use crate::spec::account::Acc;
 use crate::spec::data::DataPiece;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Color {
+    White,
+    Gray,
+    Black,
+}
+
 fn dfs<'a>(
     node: &'a str,
     graph: &'a BTreeMap<&'a str, Vec<&'a str>>,
-    color: &mut BTreeMap<&'a str, u8>,
+    color: &mut BTreeMap<&'a str, Color>,
     path: &mut Vec<&'a str>,
 ) -> Result<(), Vec<String>> {
-    color.insert(node, 1);
+    color.insert(node, Color::Gray);
     path.push(node);
     if let Some(deps) = graph.get(node) {
         for dep in deps {
             match color.get(dep) {
-                Some(1) => {
+                Some(Color::Gray) => {
                     let mut cycle: Vec<String> = path.iter().map(|s| (*s).to_string()).collect();
                     cycle.push((*dep).to_string());
                     return Err(cycle);
                 }
-                Some(0) | None => {
+                Some(Color::White) | None => {
                     dfs(dep, graph, color, path)?;
                 }
-                _ => {}
+                Some(Color::Black) => {}
             }
         }
     }
-    color.insert(node, 2);
+    color.insert(node, Color::Black);
     path.pop();
     Ok(())
 }
 
 fn detect_cycles(graph: &BTreeMap<&str, Vec<&str>>) -> Result<(), StamperError> {
-    let mut color: BTreeMap<&str, u8> = graph.keys().map(|k| (*k, 0u8)).collect();
+    let mut color: BTreeMap<&str, Color> = graph.keys().map(|k| (*k, Color::White)).collect();
     let mut path: Vec<&str> = Vec::new();
     let node_keys: Vec<&str> = graph.keys().copied().collect();
     for node in node_keys {
-        if color.get(node).copied() == Some(0) && let Err(cycle) = dfs(node, graph, &mut color, &mut path) {
+        if color.get(node).copied() == Some(Color::White) && let Err(cycle) = dfs(node, graph, &mut color, &mut path) {
             return Err(StamperError::CyclicComputed { cycle });
         }
     }
