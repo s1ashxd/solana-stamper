@@ -262,3 +262,61 @@ fn envelope_user_slot_unknown_errors() {
     let err = env.set_user("nope", b"x").err().unwrap();
     assert!(matches!(err, tx_stamper::error::StamperError::UnknownUserSlot { .. }));
 }
+
+#[test]
+fn envelope_user_slot_after_body_writes_correct_offset() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let mut tag_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    tag_sentinel.extend_from_slice(b"<<TAG>>");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"START<<BODY>>MID<<TAG>>END".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Binary,
+        },
+        content_length: None,
+        user_slots: smallvec::smallvec![UserSlot { name: "tag", sentinel: tag_sentinel }],
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    env.set_user("tag", b"XYZ1234").unwrap();
+    let wire = env.splice(&stamped).unwrap();
+    let start_pos = wire.windows(5).position(|w| w == b"START").unwrap();
+    let xyz_pos = wire.windows(7).position(|w| w == b"XYZ1234").unwrap();
+    let end_pos = wire.windows(3).position(|w| w == b"END").unwrap();
+    assert!(start_pos < xyz_pos);
+    assert!(xyz_pos < end_pos);
+}
+
+#[test]
+fn envelope_content_length_after_body_writes_correct_offset() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let mut cl_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    cl_sentinel.extend_from_slice(b"<<CL>>     ");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"PRE<<BODY>>MID<<CL>>     POST".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Base64,
+        },
+        content_length: Some(ContentLengthSpec {
+            sentinel: cl_sentinel,
+            width: 11,
+        }),
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let wire = env.splice(&stamped).unwrap();
+    let mid_pos = wire.windows(3).position(|w| w == b"MID").unwrap();
+    let post_pos = wire.windows(4).position(|w| w == b"POST").unwrap();
+    assert!(post_pos - mid_pos >= 14);
+    let cl_segment = std::str::from_utf8(&wire[mid_pos + 3..mid_pos + 14]).unwrap();
+    let cl_value: usize = cl_segment.trim().parse().unwrap();
+    let stamped_b64_len = stamped.as_bytes().len().div_ceil(3) * 4;
+    assert_eq!(cl_value, stamped_b64_len);
+}

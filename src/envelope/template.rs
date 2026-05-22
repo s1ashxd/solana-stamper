@@ -22,7 +22,7 @@ impl EnvelopeTemplate {
         let body_off = find_unique(&spec.bytes, &spec.body.sentinel)
             .map_err(|_| StamperError::EnvelopeBodyMissing)?;
 
-        let (cl_off, cl_width) = if let Some(ref cl) = spec.content_length {
+        let (mut cl_off, cl_width) = if let Some(ref cl) = spec.content_length {
             let off = find_unique(&spec.bytes, &cl.sentinel).map_err(|_| StamperError::EnvelopeBodyMissing)?;
             (Some(u32::try_from(off).expect("cl off fits")), cl.width)
         } else {
@@ -45,6 +45,19 @@ impl EnvelopeTemplate {
             padded.extend(std::iter::repeat_n(b' ', max_len));
             padded.extend_from_slice(&spec.bytes[body_off + sentinel_len..]);
             spec.bytes = padded;
+            let delta = u32::try_from(max_len - sentinel_len).expect("delta fits");
+            let shift_threshold = u32::try_from(body_off + sentinel_len).expect("threshold fits");
+            if let Some(ref mut off) = cl_off
+                && *off >= shift_threshold
+            {
+                *off += delta;
+            }
+            for range in user_slots.values_mut() {
+                if range.start >= shift_threshold {
+                    range.start += delta;
+                    range.end += delta;
+                }
+            }
         }
 
         let body_max = u32::try_from(max_len).expect("body_max fits");
@@ -112,7 +125,11 @@ impl EnvelopeTemplate {
         let real_len = suffix_start + self.suffix_len as usize;
 
         if let Some(cl_off) = self.cl_off {
-            let cl_off_usize = cl_off as usize;
+            let cl_off_usize = if cl_off as usize >= suffix_src_start {
+                suffix_start + (cl_off as usize - suffix_src_start)
+            } else {
+                cl_off as usize
+            };
             let cl_width = self.cl_width as usize;
             let body_len_value = encoded_len;
             let digits = format!("{body_len_value}");
