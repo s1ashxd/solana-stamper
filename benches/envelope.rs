@@ -38,11 +38,10 @@ fn bench_splice_base64(c: &mut Criterion) {
         content_length: None,
         user_slots: SmallVec::new(),
     };
-    let env = EnvelopeTemplate::compile(env_spec).unwrap();
-    let mut out: Vec<u8> = Vec::with_capacity(4096);
+    let mut env = EnvelopeTemplate::compile(env_spec).unwrap();
     c.bench_function("envelope_splice_base64", |b| {
         b.iter(|| {
-            env.splice_into(&stamped, &mut out).unwrap().len()
+            env.splice(&stamped).unwrap();
         });
     });
 }
