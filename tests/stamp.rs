@@ -104,6 +104,7 @@ fn stamp_bundle_two_providers_produce_distinct_txs() {
         .sign(&signer).unwrap();
 
     assert_eq!(bundle.len(), 2);
+    assert!(!bundle.is_empty());
     let tx0 = bundle.reconstruct(0);
     let tx1 = bundle.reconstruct(1);
     assert_ne!(tx0.as_bytes(), tx1.as_bytes());
