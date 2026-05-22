@@ -31,6 +31,7 @@ pub enum PatchKind {
     U16,
     U32,
     U64,
+    U128,
 }
 
 impl PatchKind {
@@ -42,6 +43,7 @@ impl PatchKind {
             Self::U16 => 2,
             Self::U32 => 4,
             Self::U64 => 8,
+            Self::U128 => 16,
         }
     }
 
@@ -178,6 +180,7 @@ impl Template {
         let mut computed_meta: Vec<(String, SmallVec<[String; 4]>, DeriveFn)> = Vec::new();
         let mut additional_signers: SmallVec<[String; 2]> = SmallVec::new();
 
+        let mut u128_sentinels: BTreeMap<String, u128> = BTreeMap::new();
         let mut u64_sentinels: BTreeMap<String, u64> = BTreeMap::new();
         let mut u32_sentinels: BTreeMap<String, u32> = BTreeMap::new();
         let mut u16_sentinels: BTreeMap<String, u16> = BTreeMap::new();
@@ -353,6 +356,15 @@ impl Template {
                             .entry((*n).to_string())
                             .or_insert_with(|| alloc.u64_magic());
                         slot_kinds.insert((*n).to_string(), SlotKind::U64);
+                        per_provider_flags.insert((*n).to_string(), false);
+                        *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
+                        bytes.extend_from_slice(&mag.to_le_bytes());
+                    }
+                    DataPiece::U128Slot(n) => {
+                        let mag = *u128_sentinels
+                            .entry((*n).to_string())
+                            .or_insert_with(|| alloc.u128_magic());
+                        slot_kinds.insert((*n).to_string(), SlotKind::U128);
                         per_provider_flags.insert((*n).to_string(), false);
                         *expected_counts.entry((*n).to_string()).or_insert(0) += 1;
                         bytes.extend_from_slice(&mag.to_le_bytes());
@@ -555,6 +567,21 @@ impl Template {
                 &mag.to_le_bytes(),
                 PatchKind::U64,
                 SlotKind::U64,
+                expected,
+                per_provider,
+            )?;
+        }
+
+        for (name, mag) in &u128_sentinels {
+            let expected = expected_counts.get(name).copied().unwrap_or(1);
+            let per_provider = per_provider_flags.get(name).copied().unwrap_or(false);
+            register_sentinel(
+                &mut slot_table,
+                &buf_vec,
+                name,
+                &mag.to_le_bytes(),
+                PatchKind::U128,
+                SlotKind::U128,
                 expected,
                 per_provider,
             )?;

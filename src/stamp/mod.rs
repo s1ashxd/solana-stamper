@@ -10,7 +10,7 @@ use solana_sdk::pubkey::Pubkey;
 use crate::error::StamperError;
 use crate::signer::Signer;
 use crate::stamp::patch::{
-    patch_hash, patch_pubkey, patch_sig, patch_u8, patch_u16, patch_u32, patch_u64,
+    patch_hash, patch_pubkey, patch_sig, patch_u8, patch_u16, patch_u32, patch_u64, patch_u128,
 };
 use crate::stamp::values::{ResolvedSlots, SlotValue};
 use crate::stamped::StampedTx;
@@ -135,6 +135,9 @@ impl StampBuilder<'_> {
                     }
                     (PatchKind::U64, SlotValue::U64(n)) => {
                         patch_u64(&mut buf, usize::from(op.offset), *n)
+                    }
+                    (PatchKind::U128, SlotValue::U128(n)) => {
+                        patch_u128(&mut buf, usize::from(op.offset), *n)
                     }
                     _ => {
                         return Err(StamperError::WrongSlotType {

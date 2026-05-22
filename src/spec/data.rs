@@ -7,6 +7,7 @@ pub enum DataPiece {
     U16Slot(&'static str),
     U32Slot(&'static str),
     U64Slot(&'static str),
+    U128Slot(&'static str),
     PubkeySlot(&'static str),
 }
 
@@ -47,6 +48,12 @@ impl DataSpec {
     #[must_use]
     pub fn u64_slot(mut self, n: &'static str) -> Self {
         self.0.push(DataPiece::U64Slot(n));
+        self
+    }
+
+    #[must_use]
+    pub fn u128_slot(mut self, n: &'static str) -> Self {
+        self.0.push(DataPiece::U128Slot(n));
         self
     }
 

@@ -2,6 +2,7 @@ pub struct MarkerAllocator {
     pubkey: u8,
     hash: u8,
     signer: u8,
+    u128_n: u16,
     u64_n: u16,
     u32_n: u16,
     u16_n: u16,
@@ -15,6 +16,7 @@ impl MarkerAllocator {
             pubkey: 0,
             hash: 0,
             signer: 0,
+            u128_n: 0,
             u64_n: 0,
             u32_n: 0,
             u16_n: 0,
@@ -44,6 +46,12 @@ impl MarkerAllocator {
         out[31] = self.signer;
         self.signer = self.signer.checked_add(1).expect("too many signer slots");
         out
+    }
+
+    pub fn u128_magic(&mut self) -> u128 {
+        let n = u128::from(self.u128_n);
+        self.u128_n = self.u128_n.checked_add(1).expect("too many u128 slots");
+        0xC0DE_C0DE_C0DE_C0DE_C0DE_C0DE_C0DE_0000_u128 | n
     }
 
     pub fn u64_magic(&mut self) -> u64 {

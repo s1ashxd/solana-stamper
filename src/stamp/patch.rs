@@ -22,6 +22,10 @@ pub fn patch_u64(buf: &mut [u8], offset: usize, value: u64) {
     buf[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
 }
 
+pub fn patch_u128(buf: &mut [u8], offset: usize, value: u128) {
+    buf[offset..offset + 16].copy_from_slice(&value.to_le_bytes());
+}
+
 pub fn patch_sig(buf: &mut [u8], offset: usize, value: &[u8; 64]) {
     buf[offset..offset + 64].copy_from_slice(value);
 }

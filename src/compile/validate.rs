@@ -101,6 +101,7 @@ pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
                 | DataPiece::U16Slot(n)
                 | DataPiece::U32Slot(n)
                 | DataPiece::U64Slot(n)
+                | DataPiece::U128Slot(n)
                 | DataPiece::PubkeySlot(n) => Some(*n),
                 DataPiece::Bytes(_) => None,
             };

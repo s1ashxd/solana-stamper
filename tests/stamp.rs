@@ -220,3 +220,38 @@ fn stamped_to_base64_round_trip() {
     let decoded_sig = bs58::decode(&sig_b58).into_vec().unwrap();
     assert_eq!(decoded_sig.len(), 64);
 }
+
+#[test]
+fn stamp_writes_u128_value_at_offset() {
+    use solana_sdk::hash::Hash;
+    use solana_sdk::pubkey::Pubkey;
+    use tx_stamper::signer::KeypairSigner;
+    use tx_stamper::spec::data::DataSpec;
+    use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::spec::{MessageVersion, TemplateSpec};
+    use tx_stamper::template::Template;
+
+    let signer = KeypairSigner::from_bytes(&[3u8; 32]);
+    let payer = signer.pubkey();
+    let program = Pubkey::new_unique();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(program)
+            .data(DataSpec::bytes(&[0x55]).u128_slot("price")),
+    );
+    let tpl = Template::compile(spec).expect("compile");
+
+    let value: u128 = 0x1122_3344_5566_7788_9900_AABB_CCDD_EEFF;
+    let stamped = tpl
+        .stamp()
+        .set("price", value)
+        .blockhash(Hash::new_from_array([9u8; 32]))
+        .sign(&signer)
+        .expect("sign");
+
+    let needle = value.to_le_bytes();
+    assert!(
+        stamped.as_bytes().windows(16).any(|w| w == needle),
+        "u128 value bytes not found in stamped tx"
+    );
+}

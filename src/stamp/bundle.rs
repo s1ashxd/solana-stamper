@@ -6,7 +6,7 @@ use crate::compile::MAX_TX_SIZE;
 use crate::error::StamperError;
 use crate::signer::Signer;
 use crate::stamp::patch::{
-    patch_hash, patch_pubkey, patch_sig, patch_u8, patch_u16, patch_u32, patch_u64,
+    patch_hash, patch_pubkey, patch_sig, patch_u8, patch_u16, patch_u32, patch_u64, patch_u128,
 };
 use crate::stamp::values::{ResolvedSlots, SlotValue};
 use crate::stamped::StampedTx;
@@ -67,6 +67,7 @@ fn apply_value(buf: &mut [u8], offset: usize, value: &SlotValue) {
         SlotValue::U16(n) => patch_u16(buf, offset, *n),
         SlotValue::U32(n) => patch_u32(buf, offset, *n),
         SlotValue::U64(n) => patch_u64(buf, offset, *n),
+        SlotValue::U128(n) => patch_u128(buf, offset, *n),
     }
 }
 
@@ -178,6 +179,9 @@ impl BundleBuilder<'_> {
                     }
                     (PatchKind::U64, SlotValue::U64(n)) => {
                         patch_u64(&mut base, usize::from(op.offset), *n)
+                    }
+                    (PatchKind::U128, SlotValue::U128(n)) => {
+                        patch_u128(&mut base, usize::from(op.offset), *n)
                     }
                     _ => {
                         return Err(StamperError::WrongSlotType {

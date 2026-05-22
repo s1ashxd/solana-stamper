@@ -5,6 +5,7 @@ pub enum SlotKind {
     U16,
     U32,
     U64,
+    U128,
     Hash,
 }
 

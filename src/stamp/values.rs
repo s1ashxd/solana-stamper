@@ -14,6 +14,7 @@ pub enum SlotValue {
     U16(u16),
     U32(u32),
     U64(u64),
+    U128(u128),
 }
 
 impl SlotValue {
@@ -26,6 +27,7 @@ impl SlotValue {
             Self::U16(_) => SlotKind::U16,
             Self::U32(_) => SlotKind::U32,
             Self::U64(_) => SlotKind::U64,
+            Self::U128(_) => SlotKind::U128,
         }
     }
 }
@@ -66,6 +68,11 @@ impl From<u32> for SlotValue {
 impl From<u64> for SlotValue {
     fn from(n: u64) -> Self {
         Self::U64(n)
+    }
+}
+impl From<u128> for SlotValue {
+    fn from(n: u128) -> Self {
+        Self::U128(n)
     }
 }
 
