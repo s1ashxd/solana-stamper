@@ -8,6 +8,7 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use sha2::{Digest, Sha512};
 use solana_sdk::pubkey::Pubkey;
+use zeroize::Zeroizing;
 
 pub trait Signer {
     fn pubkey(&self) -> Pubkey;
@@ -44,16 +45,24 @@ struct NonceEntry {
     r_scalar: Scalar,
 }
 
-struct Pool {
+struct PoolState {
     nonces: Vec<NonceEntry>,
+    cursor: AtomicUsize,
+}
+
+impl PoolState {
+    fn new(nonces: Vec<NonceEntry>) -> Self {
+        Self { nonces, cursor: AtomicUsize::new(0) }
+    }
 }
 
 pub struct PrecomputedSigner {
-    secret: [u8; 32],
+    secret: Zeroizing<[u8; 32]>,
+    scalar: Scalar,
+    hash_prefix: [u8; 32],
     pubkey_bytes: [u8; 32],
     pubkey: Pubkey,
-    pool: ArcSwap<Pool>,
-    cursor: AtomicUsize,
+    pool: ArcSwap<PoolState>,
 }
 
 impl PrecomputedSigner {
@@ -63,44 +72,40 @@ impl PrecomputedSigner {
         let pubkey_bytes = signing_key.verifying_key().to_bytes();
         let pubkey = Pubkey::new_from_array(pubkey_bytes);
         let expanded = ExpandedSecretKey::from(secret);
-        let pool = Pool {
-            nonces: generate_nonces(&expanded, pool_size),
-        };
+        let scalar = expanded.scalar;
+        let hash_prefix = expanded.hash_prefix;
+        let pool = PoolState::new(generate_nonces(&hash_prefix, pool_size));
         Self {
-            secret: *secret,
+            secret: Zeroizing::new(*secret),
+            scalar,
+            hash_prefix,
             pubkey_bytes,
             pubkey,
             pool: ArcSwap::from_pointee(pool),
-            cursor: AtomicUsize::new(0),
         }
     }
 
     pub fn refill(&self, count: usize) {
-        let expanded = ExpandedSecretKey::from(&self.secret);
-        let pool = Pool {
-            nonces: generate_nonces(&expanded, count),
-        };
-        self.pool.store(Arc::new(pool));
-        self.cursor.store(0, Ordering::Release);
+        let new_pool = PoolState::new(generate_nonces(&self.hash_prefix, count));
+        self.pool.store(Arc::new(new_pool));
     }
 
     #[must_use]
     pub fn pool_remaining(&self) -> usize {
         let pool = self.pool.load();
-        pool.nonces.len().saturating_sub(self.cursor.load(Ordering::Acquire))
+        pool.nonces.len().saturating_sub(pool.cursor.load(Ordering::Acquire))
     }
 
     fn try_sign_with_pool(&self, message: &[u8]) -> Option<[u8; 64]> {
         let pool = self.pool.load();
-        let idx = self.cursor.fetch_add(1, Ordering::AcqRel);
+        let idx = pool.cursor.fetch_add(1, Ordering::AcqRel);
         let entry = pool.nonces.get(idx)?;
-        let expanded = ExpandedSecretKey::from(&self.secret);
         let mut hasher = Sha512::new();
         hasher.update(entry.r_bytes);
         hasher.update(self.pubkey_bytes);
         hasher.update(message);
         let k = Scalar::from_hash(hasher);
-        let s = entry.r_scalar + k * expanded.scalar;
+        let s = entry.r_scalar + k * self.scalar;
         let mut sig = [0u8; 64];
         sig[..32].copy_from_slice(&entry.r_bytes);
         sig[32..].copy_from_slice(s.as_bytes());
@@ -110,6 +115,14 @@ impl PrecomputedSigner {
     fn deterministic(&self, message: &[u8]) -> [u8; 64] {
         let signing_key = SigningKey::from_bytes(&self.secret);
         signing_key.sign(message).to_bytes()
+    }
+}
+
+impl Drop for PrecomputedSigner {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.scalar = Scalar::ZERO;
+        self.hash_prefix.zeroize();
     }
 }
 
@@ -123,13 +136,13 @@ impl Signer for PrecomputedSigner {
     }
 }
 
-fn generate_nonces(expanded: &ExpandedSecretKey, count: usize) -> Vec<NonceEntry> {
+fn generate_nonces(hash_prefix: &[u8; 32], count: usize) -> Vec<NonceEntry> {
     let mut out = Vec::with_capacity(count);
     let mut counter = [0u8; 32];
     for i in 0..count {
         counter[..8].copy_from_slice(&(i as u64).to_le_bytes());
         let mut hasher = Sha512::new();
-        hasher.update(expanded.hash_prefix);
+        hasher.update(hash_prefix);
         hasher.update(counter);
         let r_scalar = Scalar::from_hash(hasher);
         let r_point = ED25519_BASEPOINT_TABLE * &r_scalar;
