@@ -5,7 +5,7 @@ pub enum ScanError {
 }
 
 pub fn find_unique(haystack: &[u8], needle: &[u8]) -> Result<usize, ScanError> {
-    if needle.is_empty() {
+    if needle.is_empty() || needle.len() > haystack.len() {
         return Err(ScanError::NotFound);
     }
     let mut found: Option<usize> = None;

@@ -76,4 +76,19 @@ pub enum StamperError {
 
     #[error("provider index out of bounds: {idx} >= {len}")]
     ProviderOutOfBounds { idx: usize, len: usize },
+
+    #[error("envelope body sentinel not found in template buffer")]
+    EnvelopeBodyMissing,
+
+    #[error("encoded body too large: {encoded} > body_max {body_max}")]
+    BodyTooLarge { encoded: usize, body_max: usize },
+
+    #[error("envelope content-length width too small for value {value}: width {width}")]
+    ContentLengthOverflow { value: usize, width: u8 },
+
+    #[error("envelope user slot {name} value too large: {value} > sentinel.len {sentinel}")]
+    UserSlotOverflow { name: String, value: usize, sentinel: usize },
+
+    #[error("envelope user slot {name} not declared")]
+    UnknownUserSlot { name: String },
 }
