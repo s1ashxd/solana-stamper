@@ -152,3 +152,25 @@ fn serialize_oversize_returns_error() {
     let err = serialize_placeholder_tx(&payer, blockhash, &[ix], &[], 1).unwrap_err();
     assert!(matches!(err, tx_stamper::error::StamperError::TransactionTooLarge { .. }));
 }
+
+use tx_stamper::compile::scan::{find_all, find_unique};
+
+#[test]
+fn find_unique_returns_offset() {
+    let haystack = b"\x00\x01\x02\xC0\xC0\xC0\xC0\x05";
+    let offset = find_unique(haystack, &[0xC0, 0xC0, 0xC0, 0xC0]).unwrap();
+    assert_eq!(offset, 3);
+}
+
+#[test]
+fn find_all_returns_all_offsets() {
+    let haystack = b"\x01\x02\x01\x02\x03\x01\x02";
+    let offs = find_all(haystack, &[0x01, 0x02]);
+    assert_eq!(offs, vec![0, 2, 5]);
+}
+
+#[test]
+fn find_unique_errors_on_multiple_matches() {
+    let haystack = b"\xC0\xC0\xC0\xC0";
+    assert!(find_unique(haystack, &[0xC0, 0xC0]).is_err());
+}

@@ -1,6 +1,7 @@
 pub mod depgraph;
 pub mod markers;
 pub mod resolve;
+pub mod scan;
 pub mod serialize;
 pub mod validate;
 
