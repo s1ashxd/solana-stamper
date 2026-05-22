@@ -93,3 +93,36 @@ fn topo_sort_diamond() {
     assert!(pos_b < pos_d);
     assert!(pos_c < pos_d);
 }
+
+use tx_stamper::compile::resolve::{ResolveContext, resolve_account};
+
+#[test]
+fn resolve_payer_returns_spec_payer() {
+    let payer = Pubkey::new_unique();
+    let mut ctx = ResolveContext::new(payer);
+    let mut alloc = MarkerAllocator::new();
+    let pk = resolve_account(&Acc::payer(), &mut ctx, &mut alloc).unwrap();
+    assert_eq!(pk, payer);
+}
+
+#[test]
+fn resolve_slot_uses_fresh_sentinel() {
+    let payer = Pubkey::new_unique();
+    let mut ctx = ResolveContext::new(payer);
+    let mut alloc = MarkerAllocator::new();
+    let a1 = resolve_account(&Acc::slot("mint"), &mut ctx, &mut alloc).unwrap();
+    let a2 = resolve_account(&Acc::slot("bonding"), &mut ctx, &mut alloc).unwrap();
+    assert_ne!(a1, a2);
+    assert_eq!(a1.to_bytes()[0], 0xC0);
+    assert_eq!(a2.to_bytes()[0], 0xC0);
+}
+
+#[test]
+fn resolve_slot_same_name_returns_same_sentinel() {
+    let payer = Pubkey::new_unique();
+    let mut ctx = ResolveContext::new(payer);
+    let mut alloc = MarkerAllocator::new();
+    let a1 = resolve_account(&Acc::slot("mint"), &mut ctx, &mut alloc).unwrap();
+    let a2 = resolve_account(&Acc::slot("mint"), &mut ctx, &mut alloc).unwrap();
+    assert_eq!(a1, a2);
+}
