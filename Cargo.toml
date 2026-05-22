@@ -22,12 +22,17 @@ bs58 = "0.5"
 
 [dev-dependencies]
 proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
 pumpfun = []
 pumpswap = []
 damm-v2 = []
 printr = []
+
+[[bench]]
+name = "stamp"
+harness = false
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
