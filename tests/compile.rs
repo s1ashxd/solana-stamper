@@ -63,3 +63,33 @@ fn validate_cycle_rejected() {
     let err = validate_spec(&spec).unwrap_err();
     assert!(matches!(err, StamperError::CyclicComputed { .. }));
 }
+
+use tx_stamper::compile::depgraph::topo_sort;
+
+#[test]
+fn topo_sort_chain() {
+    let mut graph = std::collections::BTreeMap::new();
+    graph.insert("c", vec!["b"]);
+    graph.insert("b", vec!["a"]);
+    graph.insert("a", vec![]);
+    let sorted = topo_sort(&graph);
+    assert_eq!(sorted, vec!["a", "b", "c"]);
+}
+
+#[test]
+fn topo_sort_diamond() {
+    let mut graph = std::collections::BTreeMap::new();
+    graph.insert("d", vec!["b", "c"]);
+    graph.insert("b", vec!["a"]);
+    graph.insert("c", vec!["a"]);
+    graph.insert("a", vec![]);
+    let sorted = topo_sort(&graph);
+    let pos_a = sorted.iter().position(|s| s == "a").unwrap();
+    let pos_b = sorted.iter().position(|s| s == "b").unwrap();
+    let pos_c = sorted.iter().position(|s| s == "c").unwrap();
+    let pos_d = sorted.iter().position(|s| s == "d").unwrap();
+    assert!(pos_a < pos_b);
+    assert!(pos_a < pos_c);
+    assert!(pos_b < pos_d);
+    assert!(pos_c < pos_d);
+}

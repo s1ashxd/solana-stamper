@@ -1,3 +1,4 @@
+pub mod depgraph;
 pub mod markers;
 pub mod validate;
 
