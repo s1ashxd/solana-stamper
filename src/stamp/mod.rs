@@ -1,3 +1,4 @@
+pub mod bundle;
 pub mod patch;
 pub mod values;
 

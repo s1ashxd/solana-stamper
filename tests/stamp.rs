@@ -60,3 +60,111 @@ fn patch_u64_writes_8_le_bytes() {
     patch_u64(&mut buf, 4, 0xDEAD_BEEF_CAFE_BABE);
     assert_eq!(&buf[4..12], &0xDEAD_BEEF_CAFE_BABE_u64.to_le_bytes());
 }
+
+#[test]
+fn stamp_bundle_two_providers_produce_distinct_txs() {
+    use smallvec::smallvec;
+    use tx_stamper::spec::prefix::{PrefixOptions, TipTransferSlots};
+    use tx_stamper::stamp::bundle::PerProviderValues;
+
+    let signer = KeypairSigner::from_bytes(&[3u8; 32]);
+    let payer = signer.pubkey();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+            account_slot: "tip_account",
+            lamports_slot: "tip_lamports",
+            per_provider: true,
+        }))
+        .ix(InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl = Template::compile(spec).unwrap();
+
+    let providers = vec![
+        PerProviderValues {
+            slots: smallvec![
+                ("tip_account".into(), Pubkey::new_unique().into()),
+                ("tip_lamports".into(), 100_000u64.into()),
+            ],
+        },
+        PerProviderValues {
+            slots: smallvec![
+                ("tip_account".into(), Pubkey::new_unique().into()),
+                ("tip_lamports".into(), 200_000u64.into()),
+            ],
+        },
+    ];
+
+    let bundle = tpl.stamp_bundle(providers)
+        .set("recipient", Pubkey::new_unique())
+        .set("amount", 1_000u64)
+        .blockhash(Hash::new_from_array([8u8; 32]))
+        .sign(&signer).unwrap();
+
+    assert_eq!(bundle.len(), 2);
+    let tx0 = bundle.reconstruct(0);
+    let tx1 = bundle.reconstruct(1);
+    assert_ne!(tx0.as_bytes(), tx1.as_bytes());
+}
+
+#[test]
+fn bundle_reconstruct_equals_individual_stamp() {
+    use smallvec::smallvec;
+    use tx_stamper::spec::prefix::{PrefixOptions, TipTransferSlots};
+    use tx_stamper::stamp::bundle::PerProviderValues;
+
+    let signer = KeypairSigner::from_bytes(&[11u8; 32]);
+    let payer = signer.pubkey();
+    let recipient = Pubkey::new_unique();
+    let tip_a = Pubkey::new_unique();
+    let blockhash = Hash::new_from_array([12u8; 32]);
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+            account_slot: "tip_account",
+            lamports_slot: "tip_lamports",
+            per_provider: true,
+        }))
+        .ix(InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl = Template::compile(spec).unwrap();
+
+    let bundle = tpl.stamp_bundle(vec![PerProviderValues {
+        slots: smallvec![
+            ("tip_account".into(), tip_a.into()),
+            ("tip_lamports".into(), 100_000u64.into()),
+        ],
+    }])
+        .set("recipient", recipient)
+        .set("amount", 5_000u64)
+        .blockhash(blockhash)
+        .sign(&signer).unwrap();
+
+    let from_bundle = bundle.reconstruct(0);
+
+    let spec2 = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+            account_slot: "tip_account",
+            lamports_slot: "tip_lamports",
+            per_provider: false,
+        }))
+        .ix(InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl_solo = Template::compile(spec2).unwrap();
+
+    let direct = tpl_solo.stamp()
+        .set("recipient", recipient)
+        .set("amount", 5_000u64)
+        .set("tip_account", tip_a)
+        .set("tip_lamports", 100_000u64)
+        .blockhash(blockhash)
+        .sign(&signer).unwrap();
+
+    assert_eq!(from_bundle.as_bytes(), direct.as_bytes());
+}
