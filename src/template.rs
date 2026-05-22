@@ -17,8 +17,8 @@ use crate::spec::TemplateSpec;
 use crate::spec::account::Acc;
 use crate::spec::account::DeriveFn;
 use crate::spec::data::DataPiece;
-use crate::spec::slot::SlotKind;
 use crate::spec::prefix::AuthoritySource;
+use crate::spec::slot::SlotKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatchKind {
@@ -41,6 +41,11 @@ impl PatchKind {
             Self::U64 => 8,
         }
     }
+
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -53,6 +58,11 @@ impl PatchOp {
     #[must_use]
     pub const fn len(&self) -> usize {
         self.kind.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 }
 
@@ -71,6 +81,7 @@ pub struct ComputedSlot {
     pub patches: SmallVec<[PatchOp; 4]>,
 }
 
+#[allow(dead_code)]
 pub struct Template {
     pub(crate) buf: [u8; MAX_TX_SIZE],
     pub(crate) len: u16,
@@ -92,6 +103,7 @@ impl Template {
         self.slot_table.keys().map(String::as_str)
     }
 
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
     pub fn compile(spec: TemplateSpec) -> Result<Self, StamperError> {
         validate_spec(&spec)?;
 
@@ -340,15 +352,15 @@ impl Template {
         let sorted = topo_sort(&computed_graph);
         let mut computed_ordered: SmallVec<[ComputedSlot; 4]> = SmallVec::new();
         for name in sorted {
-            if let Some((_, deps, compute)) = computed_meta.iter().find(|(n, _, _)| n == &name) {
-                if let Some(slot) = slot_table.get(&name) {
-                    computed_ordered.push(ComputedSlot {
-                        name: name.clone(),
-                        deps: deps.clone(),
-                        compute: compute.clone(),
-                        patches: slot.patches.clone(),
-                    });
-                }
+            if let Some((_, deps, compute)) = computed_meta.iter().find(|(n, _, _)| n == &name)
+                && let Some(slot) = slot_table.get(&name)
+            {
+                computed_ordered.push(ComputedSlot {
+                    name: name.clone(),
+                    deps: deps.clone(),
+                    compute: compute.clone(),
+                    patches: slot.patches.clone(),
+                });
             }
         }
 

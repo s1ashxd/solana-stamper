@@ -5,6 +5,46 @@ use crate::spec::TemplateSpec;
 use crate::spec::account::Acc;
 use crate::spec::data::DataPiece;
 
+fn dfs<'a>(
+    node: &'a str,
+    graph: &'a BTreeMap<&'a str, Vec<&'a str>>,
+    color: &mut BTreeMap<&'a str, u8>,
+    path: &mut Vec<&'a str>,
+) -> Result<(), Vec<String>> {
+    color.insert(node, 1);
+    path.push(node);
+    if let Some(deps) = graph.get(node) {
+        for dep in deps {
+            match color.get(dep) {
+                Some(1) => {
+                    let mut cycle: Vec<String> = path.iter().map(|s| (*s).to_string()).collect();
+                    cycle.push((*dep).to_string());
+                    return Err(cycle);
+                }
+                Some(0) | None => {
+                    dfs(dep, graph, color, path)?;
+                }
+                _ => {}
+            }
+        }
+    }
+    color.insert(node, 2);
+    path.pop();
+    Ok(())
+}
+
+fn detect_cycles(graph: &BTreeMap<&str, Vec<&str>>) -> Result<(), StamperError> {
+    let mut color: BTreeMap<&str, u8> = graph.keys().map(|k| (*k, 0u8)).collect();
+    let mut path: Vec<&str> = Vec::new();
+    let node_keys: Vec<&str> = graph.keys().copied().collect();
+    for node in node_keys {
+        if color.get(node).copied() == Some(0) && let Err(cycle) = dfs(node, graph, &mut color, &mut path) {
+            return Err(StamperError::CyclicComputed { cycle });
+        }
+    }
+    Ok(())
+}
+
 pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
     let mut names: BTreeSet<&str> = BTreeSet::new();
     let mut computed: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -41,10 +81,8 @@ pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
                 | DataPiece::U64Slot(n) | DataPiece::PubkeySlot(n) => Some(*n),
                 DataPiece::Bytes(_) => None,
             };
-            if let Some(name) = slot {
-                if !names.insert(name) {
-                    return Err(StamperError::DuplicateSlotName { name: name.to_string() });
-                }
+            if let Some(name) = slot && !names.insert(name) {
+                return Err(StamperError::DuplicateSlotName { name: name.to_string() });
             }
         }
     }
@@ -67,50 +105,5 @@ pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
     }
 
     detect_cycles(&computed)?;
-    Ok(())
-}
-
-fn detect_cycles(graph: &BTreeMap<&str, Vec<&str>>) -> Result<(), StamperError> {
-    #[derive(Clone, Copy)]
-    enum Color { White, Gray, Black }
-    let mut color: BTreeMap<&str, Color> = graph.keys().map(|k| (*k, Color::White)).collect();
-    let mut path: Vec<&str> = Vec::new();
-
-    fn dfs<'a>(
-        node: &'a str,
-        graph: &'a BTreeMap<&'a str, Vec<&'a str>>,
-        color: &mut BTreeMap<&'a str, Color>,
-        path: &mut Vec<&'a str>,
-    ) -> Result<(), Vec<String>> {
-        color.insert(node, Color::Gray);
-        path.push(node);
-        if let Some(deps) = graph.get(node) {
-            for dep in deps {
-                match color.get(dep) {
-                    Some(Color::Gray) => {
-                        let mut cycle: Vec<String> = path.iter().map(|s| (*s).to_string()).collect();
-                        cycle.push((*dep).to_string());
-                        return Err(cycle);
-                    }
-                    Some(Color::White) => {
-                        dfs(dep, graph, color, path)?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        color.insert(node, Color::Black);
-        path.pop();
-        Ok(())
-    }
-
-    let node_keys: Vec<&str> = graph.keys().copied().collect();
-    for node in node_keys {
-        if matches!(color.get(node), Some(Color::White)) {
-            if let Err(cycle) = dfs(node, graph, &mut color, &mut path) {
-                return Err(StamperError::CyclicComputed { cycle });
-            }
-        }
-    }
     Ok(())
 }
