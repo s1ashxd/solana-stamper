@@ -1,4 +1,5 @@
 pub mod compile;
+pub mod envelope;
 pub mod error;
 pub mod signer;
 pub mod spec;
