@@ -146,3 +146,56 @@ fn envelope_splice_body_too_large_errors() {
     let err = env.splice(&stamped).err().unwrap();
     assert!(matches!(err, tx_stamper::error::StamperError::BodyTooLarge { .. }));
 }
+
+#[test]
+fn envelope_content_length_written_correctly() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let mut cl_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    cl_sentinel.extend_from_slice(b"<<CL>>     ");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"CL:<<CL>>     |B:<<BODY>>;".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Base64,
+        },
+        content_length: Some(ContentLengthSpec {
+            sentinel: cl_sentinel,
+            width: 11,
+        }),
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let wire = env.splice(&stamped).unwrap();
+    let cl_segment = std::str::from_utf8(&wire[3..14]).unwrap();
+    let cl_value: usize = cl_segment.trim().parse().unwrap();
+    let stamped_b64_len = stamped.as_bytes().len().div_ceil(3) * 4;
+    assert_eq!(cl_value, stamped_b64_len);
+}
+
+#[test]
+fn envelope_content_length_overflow_errors() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let mut cl_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    cl_sentinel.extend_from_slice(b"CL");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"CL|<<BODY>>".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Base64,
+        },
+        content_length: Some(ContentLengthSpec {
+            sentinel: cl_sentinel,
+            width: 1,
+        }),
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let err = env.splice(&stamped).err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::ContentLengthOverflow { .. }));
+}
