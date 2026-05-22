@@ -282,3 +282,19 @@ fn u8_sentinel_collision_detected() {
     assert!(matches!(err, tx_stamper::error::StamperError::MarkerCollision { .. })
         || matches!(err, tx_stamper::error::StamperError::SentinelNotFound { .. }));
 }
+
+#[test]
+fn fixed_pubkey_matching_sentinel_is_rejected() {
+    let payer = Pubkey::new_unique();
+    let mut bad_bytes = [0xC0u8; 32];
+    bad_bytes[31] = 0;
+    let bad_program = Pubkey::new_from_array(bad_bytes);
+    let spec = tx_stamper::spec::TemplateSpec::new(payer, tx_stamper::spec::MessageVersion::V0).ix(
+        tx_stamper::spec::instruction::InstructionSpec::new(bad_program)
+            .account(Acc::payer())
+            .account(Acc::slot_w("x"))
+            .data(tx_stamper::spec::data::DataSpec::bytes(&[1])),
+    );
+    let err = tx_stamper::template::Template::compile(spec).err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::FixedPubkeyHitsSentinel { .. }));
+}

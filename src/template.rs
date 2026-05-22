@@ -301,6 +301,30 @@ impl Template {
             resolved_ixs.push(Instruction { program_id: ix.program, accounts: metas, data: bytes });
         }
 
+        let mut all_pubkey_sentinels: Vec<[u8; 32]> = Vec::new();
+        for pk in ctx.slot_sentinels().values() {
+            all_pubkey_sentinels.push(pk.to_bytes());
+        }
+        for bytes in pubkey_data_sentinels.values() {
+            all_pubkey_sentinels.push(*bytes);
+        }
+        all_pubkey_sentinels.push(blockhash_sentinel.to_bytes());
+
+        for ix in &spec.ixs {
+            let pk_bytes = ix.program.to_bytes();
+            if all_pubkey_sentinels.iter().any(|s| s == &pk_bytes) {
+                return Err(StamperError::FixedPubkeyHitsSentinel { pk: ix.program });
+            }
+            for acc in &ix.accounts {
+                if let Acc::Fixed(pk, _) = acc {
+                    let pk_bytes = pk.to_bytes();
+                    if all_pubkey_sentinels.iter().any(|s| s == &pk_bytes) {
+                        return Err(StamperError::FixedPubkeyHitsSentinel { pk: *pk });
+                    }
+                }
+            }
+        }
+
         let sig_count = 1 + additional_signers.len();
         let buf_vec = serialize_placeholder_tx(&spec.payer, blockhash_sentinel, &resolved_ixs, &[], sig_count)?;
 
