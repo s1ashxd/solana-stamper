@@ -169,3 +169,39 @@ fn bundle_reconstruct_equals_individual_stamp() {
 
     assert_eq!(from_bundle.as_bytes(), direct.as_bytes());
 }
+
+#[test]
+fn stamped_to_base64_round_trip() {
+    use solana_sdk::hash::Hash;
+    use solana_sdk::pubkey::Pubkey;
+    use tx_stamper::signer::{KeypairSigner, Signer};
+    use tx_stamper::spec::{TemplateSpec, MessageVersion};
+    use tx_stamper::spec::account::Acc;
+    use tx_stamper::spec::data::DataSpec;
+    use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::template::Template;
+
+    let signer = KeypairSigner::from_bytes(&[14u8; 32]);
+    let payer = signer.pubkey();
+    let recipient = Pubkey::new_unique();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl = Template::compile(spec).unwrap();
+    let stamped = tpl.stamp()
+        .set("recipient", recipient)
+        .set("amount", 1u64)
+        .blockhash(Hash::new_from_array([1u8; 32]))
+        .sign(&signer).unwrap();
+
+    let b64 = stamped.to_base64();
+    let decoded = base64_simd::STANDARD.decode_to_vec(b64.as_bytes()).unwrap();
+    assert_eq!(decoded, stamped.as_bytes());
+
+    let sig_b58 = stamped.signature_base58();
+    let decoded_sig = bs58::decode(&sig_b58).into_vec().unwrap();
+    assert_eq!(decoded_sig.len(), 64);
+}
