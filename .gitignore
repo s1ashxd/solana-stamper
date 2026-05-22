@@ -1,0 +1,12 @@
+/target
+Cargo.lock
+
+/.omc
+/.claude
+/docs
+
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

@@ -1,0 +1,30 @@
+[package]
+name = "tx-stamper"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "V0 Solana transaction templates with byte-level re-stamping."
+
+[dependencies]
+solana-sdk = "3"
+bincode = "1.3"
+thiserror = "2"
+smallvec = "1"
+arc-swap = "1"
+ed25519-dalek = { version = "2", features = ["hazmat"] }
+curve25519-dalek = { version = "4", features = ["precomputed-tables"] }
+sha2 = { version = "0.10", features = ["asm"] }
+base64-simd = "0.8"
+bs58 = "0.5"
+
+[dev-dependencies]
+proptest = "1"
+
+[features]
+pumpfun = []
+pumpswap = []
+damm-v2 = []
+printr = []
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
