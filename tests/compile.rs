@@ -126,3 +126,29 @@ fn resolve_slot_same_name_returns_same_sentinel() {
     let a2 = resolve_account(&Acc::slot("mint"), &mut ctx, &mut alloc).unwrap();
     assert_eq!(a1, a2);
 }
+
+use solana_sdk::hash::Hash;
+use solana_sdk::instruction::{AccountMeta, Instruction};
+use tx_stamper::compile::serialize::serialize_placeholder_tx;
+
+#[test]
+fn serialize_simple_transfer_fits_in_max_tx_size() {
+    let payer = Pubkey::new_unique();
+    let recipient = Pubkey::new_unique();
+    let ix = solana_system_interface::instruction::transfer(&payer, &recipient, 1_000);
+    let blockhash = Hash::new_from_array([0xB0; 32]);
+    let bytes = serialize_placeholder_tx(&payer, blockhash, &[ix], &[], 1).unwrap();
+    assert!(bytes.len() <= tx_stamper::compile::MAX_TX_SIZE);
+    assert_eq!(bytes[0], 1);
+    assert_eq!(&bytes[1..65], &[0xAA; 64]);
+}
+
+#[test]
+fn serialize_oversize_returns_error() {
+    let payer = Pubkey::new_unique();
+    let huge_data = vec![0u8; 2000];
+    let ix = Instruction::new_with_bytes(Pubkey::new_unique(), &huge_data, vec![AccountMeta::new_readonly(payer, true)]);
+    let blockhash = Hash::new_from_array([0xB0; 32]);
+    let err = serialize_placeholder_tx(&payer, blockhash, &[ix], &[], 1).unwrap_err();
+    assert!(matches!(err, tx_stamper::error::StamperError::TransactionTooLarge { .. }));
+}
