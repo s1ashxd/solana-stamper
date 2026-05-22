@@ -43,26 +43,32 @@ pub enum Acc {
 }
 
 impl Acc {
+    #[must_use]
     pub fn fixed(pk: Pubkey) -> Self {
         Self::Fixed(pk, AccountFlags::READONLY)
     }
 
+    #[must_use]
     pub fn payer() -> Self {
         Self::Payer(AccountFlags::SIGNER_WRITABLE)
     }
 
+    #[must_use]
     pub fn slot(name: &'static str) -> Self {
         Self::Slot { name, flags: AccountFlags::READONLY, per_provider: false }
     }
 
+    #[must_use]
     pub fn slot_w(name: &'static str) -> Self {
         Self::Slot { name, flags: AccountFlags::WRITABLE, per_provider: false }
     }
 
+    #[must_use]
     pub fn slot_per_provider(name: &'static str) -> Self {
         Self::Slot { name, flags: AccountFlags::WRITABLE, per_provider: true }
     }
 
+    #[must_use]
     pub fn derived<F>(name: &'static str, deps: &[&'static str], compute: F) -> Self
     where
         F: Fn(&ResolvedSlots, &Pubkey) -> Result<Pubkey, StamperError> + Send + Sync + 'static,
@@ -75,10 +81,12 @@ impl Acc {
         }
     }
 
+    #[must_use]
     pub fn signer(name: &'static str) -> Self {
         Self::AdditionalSigner { name, flags: AccountFlags::SIGNER }
     }
 
+    #[must_use]
     pub fn writable(mut self) -> Self {
         match &mut self {
             Self::Fixed(_, f) | Self::Payer(f) | Self::AdditionalSigner { flags: f, .. } => {

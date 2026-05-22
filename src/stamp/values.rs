@@ -7,6 +7,8 @@ pub struct ResolvedSlots {
 }
 
 impl ResolvedSlots {
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn pubkey(&self, name: &str) -> Pubkey {
         *self.inner.get(name).expect("slot not resolved")
     }
