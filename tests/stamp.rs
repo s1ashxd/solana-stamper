@@ -3,10 +3,10 @@ use tx_stamper::stamp::patch::{patch_pubkey, patch_u64};
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
 use tx_stamper::signer::{KeypairSigner, Signer};
-use tx_stamper::spec::{TemplateSpec, MessageVersion};
 use tx_stamper::spec::account::Acc;
 use tx_stamper::spec::data::DataSpec;
 use tx_stamper::spec::instruction::InstructionSpec;
+use tx_stamper::spec::{MessageVersion, TemplateSpec};
 use tx_stamper::template::Template;
 
 #[test]
@@ -19,12 +19,11 @@ fn stamp_simple_transfer() {
     let mut transfer_data = vec![0u8; 4];
     transfer_data.copy_from_slice(&2u32.to_le_bytes());
 
-    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
-        InstructionSpec::new(Pubkey::default())
+    let spec =
+        TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
-            .data(DataSpec::bytes(&transfer_data).u64_slot("amount")),
-    );
+            .data(DataSpec::bytes(&transfer_data).u64_slot("amount")));
 
     let tpl = Template::compile(spec).unwrap();
     let stamped = tpl
@@ -37,7 +36,9 @@ fn stamp_simple_transfer() {
 
     let tx: solana_sdk::transaction::VersionedTransaction =
         bincode::deserialize(stamped.as_bytes()).unwrap();
-    let solana_sdk::message::VersionedMessage::V0(msg) = &tx.message else { panic!() };
+    let solana_sdk::message::VersionedMessage::V0(msg) = &tx.message else {
+        panic!()
+    };
     assert_eq!(msg.recent_blockhash, blockhash);
     assert!(msg.account_keys.iter().any(|k| k == &recipient));
 }
@@ -71,11 +72,13 @@ fn stamp_bundle_two_providers_produce_distinct_txs() {
     let payer = signer.pubkey();
 
     let spec = TemplateSpec::new(payer, MessageVersion::V0)
-        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
-            account_slot: "tip_account",
-            lamports_slot: "tip_lamports",
-            per_provider: true,
-        }))
+        .prefix(
+            PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+                account_slot: "tip_account",
+                lamports_slot: "tip_lamports",
+                per_provider: true,
+            }),
+        )
         .ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
@@ -97,11 +100,13 @@ fn stamp_bundle_two_providers_produce_distinct_txs() {
         },
     ];
 
-    let bundle = tpl.stamp_bundle(providers)
+    let bundle = tpl
+        .stamp_bundle(providers)
         .set("recipient", Pubkey::new_unique())
         .set("amount", 1_000u64)
         .blockhash(Hash::new_from_array([8u8; 32]))
-        .sign(&signer).unwrap();
+        .sign(&signer)
+        .unwrap();
 
     assert_eq!(bundle.len(), 2);
     assert!(!bundle.is_empty());
@@ -123,49 +128,57 @@ fn bundle_reconstruct_equals_individual_stamp() {
     let blockhash = Hash::new_from_array([12u8; 32]);
 
     let spec = TemplateSpec::new(payer, MessageVersion::V0)
-        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
-            account_slot: "tip_account",
-            lamports_slot: "tip_lamports",
-            per_provider: true,
-        }))
+        .prefix(
+            PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+                account_slot: "tip_account",
+                lamports_slot: "tip_lamports",
+                per_provider: true,
+            }),
+        )
         .ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
             .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
     let tpl = Template::compile(spec).unwrap();
 
-    let bundle = tpl.stamp_bundle(vec![PerProviderValues {
-        slots: smallvec![
-            ("tip_account".into(), tip_a.into()),
-            ("tip_lamports".into(), 100_000u64.into()),
-        ],
-    }])
+    let bundle = tpl
+        .stamp_bundle(vec![PerProviderValues {
+            slots: smallvec![
+                ("tip_account".into(), tip_a.into()),
+                ("tip_lamports".into(), 100_000u64.into()),
+            ],
+        }])
         .set("recipient", recipient)
         .set("amount", 5_000u64)
         .blockhash(blockhash)
-        .sign(&signer).unwrap();
+        .sign(&signer)
+        .unwrap();
 
     let from_bundle = bundle.reconstruct(0);
 
     let spec2 = TemplateSpec::new(payer, MessageVersion::V0)
-        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
-            account_slot: "tip_account",
-            lamports_slot: "tip_lamports",
-            per_provider: false,
-        }))
+        .prefix(
+            PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+                account_slot: "tip_account",
+                lamports_slot: "tip_lamports",
+                per_provider: false,
+            }),
+        )
         .ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
             .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
     let tpl_solo = Template::compile(spec2).unwrap();
 
-    let direct = tpl_solo.stamp()
+    let direct = tpl_solo
+        .stamp()
         .set("recipient", recipient)
         .set("amount", 5_000u64)
         .set("tip_account", tip_a)
         .set("tip_lamports", 100_000u64)
         .blockhash(blockhash)
-        .sign(&signer).unwrap();
+        .sign(&signer)
+        .unwrap();
 
     assert_eq!(from_bundle.as_bytes(), direct.as_bytes());
 }
@@ -175,27 +188,29 @@ fn stamped_to_base64_round_trip() {
     use solana_sdk::hash::Hash;
     use solana_sdk::pubkey::Pubkey;
     use tx_stamper::signer::{KeypairSigner, Signer};
-    use tx_stamper::spec::{TemplateSpec, MessageVersion};
     use tx_stamper::spec::account::Acc;
     use tx_stamper::spec::data::DataSpec;
     use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::spec::{MessageVersion, TemplateSpec};
     use tx_stamper::template::Template;
 
     let signer = KeypairSigner::from_bytes(&[14u8; 32]);
     let payer = signer.pubkey();
     let recipient = Pubkey::new_unique();
 
-    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
-        InstructionSpec::new(Pubkey::default())
+    let spec =
+        TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
             .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
     let tpl = Template::compile(spec).unwrap();
-    let stamped = tpl.stamp()
+    let stamped = tpl
+        .stamp()
         .set("recipient", recipient)
         .set("amount", 1u64)
         .blockhash(Hash::new_from_array([1u8; 32]))
-        .sign(&signer).unwrap();
+        .sign(&signer)
+        .unwrap();
 
     let b64 = stamped.to_base64();
     let decoded = base64_simd::STANDARD.decode_to_vec(b64.as_bytes()).unwrap();

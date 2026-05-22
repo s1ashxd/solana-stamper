@@ -38,3 +38,5 @@ harness = false
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
+too_many_lines = "allow"
+semicolon_if_nothing_returned = "allow"

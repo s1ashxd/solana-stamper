@@ -39,10 +39,17 @@ pub enum StamperError {
     InvalidLookupTable { idx: usize, reason: &'static str },
 
     #[error("missing value for slot {name} (required by {required_by:?})")]
-    MissingSlotValue { name: String, required_by: Vec<String> },
+    MissingSlotValue {
+        name: String,
+        required_by: Vec<String>,
+    },
 
     #[error("wrong type for slot {name}: expected {expected:?}, got {got:?}")]
-    WrongSlotType { name: String, expected: SlotKind, got: SlotKind },
+    WrongSlotType {
+        name: String,
+        expected: SlotKind,
+        got: SlotKind,
+    },
 
     #[error("slot {name} is per-provider; use stamp_bundle() instead of stamp()")]
     PerProviderInSingleStamp { name: String },

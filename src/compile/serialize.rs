@@ -18,7 +18,10 @@ pub fn serialize_placeholder_tx(
     let msg = V0Message::try_compile(payer, ixs, luts, blockhash)
         .map_err(|e| StamperError::V0Compile(e.to_string()))?;
     let signatures = vec![Signature::from([0xAA; 64]); signature_count];
-    let tx = VersionedTransaction { signatures, message: VersionedMessage::V0(msg) };
+    let tx = VersionedTransaction {
+        signatures,
+        message: VersionedMessage::V0(msg),
+    };
     let bytes = bincode::serialize(&tx).map_err(|e| StamperError::V0Compile(e.to_string()))?;
     if bytes.len() > MAX_TX_SIZE {
         return Err(StamperError::TransactionTooLarge { size: bytes.len() });

@@ -45,7 +45,9 @@ fn detect_cycles(graph: &BTreeMap<&str, Vec<&str>>) -> Result<(), StamperError> 
     let mut path: Vec<&str> = Vec::new();
     let node_keys: Vec<&str> = graph.keys().copied().collect();
     for node in node_keys {
-        if color.get(node).copied() == Some(Color::White) && let Err(cycle) = dfs(node, graph, &mut color, &mut path) {
+        if color.get(node).copied() == Some(Color::White)
+            && let Err(cycle) = dfs(node, graph, &mut color, &mut path)
+        {
             return Err(StamperError::CyclicComputed { cycle });
         }
     }
@@ -61,9 +63,15 @@ pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
         for acc in &ix.accounts {
             match acc {
                 Acc::Fixed(_, _) | Acc::Payer(_) => {}
-                Acc::Slot { name, per_provider: pp, .. } => {
+                Acc::Slot {
+                    name,
+                    per_provider: pp,
+                    ..
+                } => {
                     if !names.insert(name) {
-                        return Err(StamperError::DuplicateSlotName { name: (*name).to_string() });
+                        return Err(StamperError::DuplicateSlotName {
+                            name: (*name).to_string(),
+                        });
                     }
                     if *pp {
                         per_provider.insert(name);
@@ -71,25 +79,36 @@ pub fn validate_spec(spec: &TemplateSpec) -> Result<(), StamperError> {
                 }
                 Acc::Derived { name, deps, .. } => {
                     if !names.insert(name) {
-                        return Err(StamperError::DuplicateSlotName { name: (*name).to_string() });
+                        return Err(StamperError::DuplicateSlotName {
+                            name: (*name).to_string(),
+                        });
                     }
                     computed.insert(name, deps.iter().copied().collect());
                 }
                 Acc::AdditionalSigner { name, .. } => {
                     if !names.insert(name) {
-                        return Err(StamperError::DuplicateSlotName { name: (*name).to_string() });
+                        return Err(StamperError::DuplicateSlotName {
+                            name: (*name).to_string(),
+                        });
                     }
                 }
             }
         }
         for piece in &ix.data.0 {
             let slot = match piece {
-                DataPiece::U8Slot(n) | DataPiece::U16Slot(n) | DataPiece::U32Slot(n)
-                | DataPiece::U64Slot(n) | DataPiece::PubkeySlot(n) => Some(*n),
+                DataPiece::U8Slot(n)
+                | DataPiece::U16Slot(n)
+                | DataPiece::U32Slot(n)
+                | DataPiece::U64Slot(n)
+                | DataPiece::PubkeySlot(n) => Some(*n),
                 DataPiece::Bytes(_) => None,
             };
-            if let Some(name) = slot && !names.insert(name) {
-                return Err(StamperError::DuplicateSlotName { name: name.to_string() });
+            if let Some(name) = slot
+                && !names.insert(name)
+            {
+                return Err(StamperError::DuplicateSlotName {
+                    name: name.to_string(),
+                });
             }
         }
     }

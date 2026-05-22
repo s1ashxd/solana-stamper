@@ -12,13 +12,13 @@ fn slot_value_from_impls() {
     let v: SlotValue = 50u32.into();
     assert!(matches!(v, SlotValue::U32(_)));
 }
-use tx_stamper::spec::account::Acc;
-use tx_stamper::spec::data::{DataSpec, DataPiece};
-use tx_stamper::spec::prefix::{ComputeBudgetSlots, PrefixOptions};
-use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
-use tx_stamper::spec::{TemplateSpec, MessageVersion};
-use tx_stamper::spec::instruction::InstructionSpec;
 use solana_sdk::pubkey::Pubkey;
+use tx_stamper::spec::account::Acc;
+use tx_stamper::spec::data::{DataPiece, DataSpec};
+use tx_stamper::spec::instruction::InstructionSpec;
+use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
+use tx_stamper::spec::prefix::{ComputeBudgetSlots, PrefixOptions};
+use tx_stamper::spec::{MessageVersion, TemplateSpec};
 
 #[test]
 fn slot_macro_yields_static_str() {
@@ -42,7 +42,9 @@ fn acc_constructors() {
     let w = Acc::slot("mint").writable();
     if let Acc::Slot { flags, .. } = w {
         assert!(flags.writable);
-    } else { panic!() }
+    } else {
+        panic!()
+    }
 }
 
 #[test]
@@ -82,17 +84,19 @@ fn prefix_with_compute_budget() {
 fn lookup_table_address_source() {
     let pk = solana_sdk::pubkey::Pubkey::new_unique();
     let _ = AddressSource::Fixed(pk);
-    let _ = LookupTableSpec { address: AddressSource::Fixed(pk), keys: Vec::new() };
+    let _ = LookupTableSpec {
+        address: AddressSource::Fixed(pk),
+        keys: Vec::new(),
+    };
 }
 
 #[test]
 fn template_spec_builder_minimal() {
     let payer = solana_sdk::pubkey::Pubkey::new_unique();
     let program = solana_sdk::pubkey::Pubkey::new_unique();
-    let spec = TemplateSpec::new(payer, MessageVersion::V0)
-        .ix(InstructionSpec::new(program)
-            .account(Acc::payer())
-            .data(DataSpec::bytes(&[0xAB])));
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(program)
+        .account(Acc::payer())
+        .data(DataSpec::bytes(&[0xAB])));
     assert_eq!(spec.ixs.len(), 1);
     assert_eq!(spec.payer, payer);
 }

@@ -15,16 +15,25 @@ pub struct ResolveContext {
 impl ResolveContext {
     #[must_use]
     pub fn new(payer: Pubkey) -> Self {
-        Self { payer, slot_sentinels: BTreeMap::new() }
+        Self {
+            payer,
+            slot_sentinels: BTreeMap::new(),
+        }
     }
 
     #[must_use]
-    pub fn payer(&self) -> Pubkey { self.payer }
+    pub fn payer(&self) -> Pubkey {
+        self.payer
+    }
 
     #[must_use]
-    pub fn slot_sentinels(&self) -> &BTreeMap<String, Pubkey> { &self.slot_sentinels }
+    pub fn slot_sentinels(&self) -> &BTreeMap<String, Pubkey> {
+        &self.slot_sentinels
+    }
 
-    pub fn slot_sentinels_mut(&mut self) -> &mut BTreeMap<String, Pubkey> { &mut self.slot_sentinels }
+    pub fn slot_sentinels_mut(&mut self) -> &mut BTreeMap<String, Pubkey> {
+        &mut self.slot_sentinels
+    }
 }
 
 pub fn resolve_account(
@@ -51,15 +60,22 @@ pub fn resolve_account(
             ctx.slot_sentinels.insert((*name).to_string(), pk);
             Ok(pk)
         }
-        Acc::Derived { name, deps, compute, .. } => {
+        Acc::Derived {
+            name,
+            deps,
+            compute,
+            ..
+        } => {
             if let Some(pk) = ctx.slot_sentinels.get(*name) {
                 return Ok(*pk);
             }
             let mut resolved = ResolvedSlots::default();
             for dep in deps {
-                let pk = ctx.slot_sentinels.get(*dep).copied().ok_or_else(|| StamperError::MissingDependency {
-                    computed: (*name).to_string(),
-                    missing: (*dep).to_string(),
+                let pk = ctx.slot_sentinels.get(*dep).copied().ok_or_else(|| {
+                    StamperError::MissingDependency {
+                        computed: (*name).to_string(),
+                        missing: (*dep).to_string(),
+                    }
                 })?;
                 resolved.insert(*dep, pk);
             }

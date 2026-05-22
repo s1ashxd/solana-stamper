@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use solana_sdk::pubkey::Pubkey;
 use smallvec::SmallVec;
+use solana_sdk::pubkey::Pubkey;
 
 use crate::error::StamperError;
 use crate::stamp::values::ResolvedSlots;
@@ -13,13 +13,26 @@ pub struct AccountFlags {
 }
 
 impl AccountFlags {
-    pub const READONLY: Self = Self { writable: false, signer: false };
-    pub const WRITABLE: Self = Self { writable: true, signer: false };
-    pub const SIGNER: Self = Self { writable: false, signer: true };
-    pub const SIGNER_WRITABLE: Self = Self { writable: true, signer: true };
+    pub const READONLY: Self = Self {
+        writable: false,
+        signer: false,
+    };
+    pub const WRITABLE: Self = Self {
+        writable: true,
+        signer: false,
+    };
+    pub const SIGNER: Self = Self {
+        writable: false,
+        signer: true,
+    };
+    pub const SIGNER_WRITABLE: Self = Self {
+        writable: true,
+        signer: true,
+    };
 }
 
-pub type DeriveFn = Arc<dyn Fn(&ResolvedSlots, &Pubkey) -> Result<Pubkey, StamperError> + Send + Sync>;
+pub type DeriveFn =
+    Arc<dyn Fn(&ResolvedSlots, &Pubkey) -> Result<Pubkey, StamperError> + Send + Sync>;
 
 #[derive(Clone)]
 pub enum Acc {
@@ -55,17 +68,29 @@ impl Acc {
 
     #[must_use]
     pub fn slot(name: &'static str) -> Self {
-        Self::Slot { name, flags: AccountFlags::READONLY, per_provider: false }
+        Self::Slot {
+            name,
+            flags: AccountFlags::READONLY,
+            per_provider: false,
+        }
     }
 
     #[must_use]
     pub fn slot_w(name: &'static str) -> Self {
-        Self::Slot { name, flags: AccountFlags::WRITABLE, per_provider: false }
+        Self::Slot {
+            name,
+            flags: AccountFlags::WRITABLE,
+            per_provider: false,
+        }
     }
 
     #[must_use]
     pub fn slot_per_provider(name: &'static str) -> Self {
-        Self::Slot { name, flags: AccountFlags::WRITABLE, per_provider: true }
+        Self::Slot {
+            name,
+            flags: AccountFlags::WRITABLE,
+            per_provider: true,
+        }
     }
 
     #[must_use]
@@ -83,7 +108,10 @@ impl Acc {
 
     #[must_use]
     pub fn signer(name: &'static str) -> Self {
-        Self::AdditionalSigner { name, flags: AccountFlags::SIGNER }
+        Self::AdditionalSigner {
+            name,
+            flags: AccountFlags::SIGNER,
+        }
     }
 
     #[must_use]

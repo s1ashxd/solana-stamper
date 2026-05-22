@@ -26,7 +26,10 @@ impl KeypairSigner {
     pub fn from_bytes(secret: &[u8; 32]) -> Self {
         let signing_key = SigningKey::from_bytes(secret);
         let pubkey = Pubkey::new_from_array(signing_key.verifying_key().to_bytes());
-        Self { signing_key, pubkey }
+        Self {
+            signing_key,
+            pubkey,
+        }
     }
 }
 
@@ -52,7 +55,10 @@ struct PoolState {
 
 impl PoolState {
     fn new(nonces: Vec<NonceEntry>) -> Self {
-        Self { nonces, cursor: AtomicUsize::new(0) }
+        Self {
+            nonces,
+            cursor: AtomicUsize::new(0),
+        }
     }
 }
 
@@ -93,7 +99,9 @@ impl PrecomputedSigner {
     #[must_use]
     pub fn pool_remaining(&self) -> usize {
         let pool = self.pool.load();
-        pool.nonces.len().saturating_sub(pool.cursor.load(Ordering::Acquire))
+        pool.nonces
+            .len()
+            .saturating_sub(pool.cursor.load(Ordering::Acquire))
     }
 
     fn try_sign_with_pool(&self, message: &[u8]) -> Option<[u8; 64]> {
@@ -132,7 +140,8 @@ impl Signer for PrecomputedSigner {
     }
 
     fn sign(&self, message: &[u8]) -> [u8; 64] {
-        self.try_sign_with_pool(message).unwrap_or_else(|| self.deterministic(message))
+        self.try_sign_with_pool(message)
+            .unwrap_or_else(|| self.deterministic(message))
     }
 }
 

@@ -49,16 +49,24 @@ impl From<Hash> for SlotValue {
 }
 
 impl From<u8> for SlotValue {
-    fn from(n: u8) -> Self { Self::U8(n) }
+    fn from(n: u8) -> Self {
+        Self::U8(n)
+    }
 }
 impl From<u16> for SlotValue {
-    fn from(n: u16) -> Self { Self::U16(n) }
+    fn from(n: u16) -> Self {
+        Self::U16(n)
+    }
 }
 impl From<u32> for SlotValue {
-    fn from(n: u32) -> Self { Self::U32(n) }
+    fn from(n: u32) -> Self {
+        Self::U32(n)
+    }
 }
 impl From<u64> for SlotValue {
-    fn from(n: u64) -> Self { Self::U64(n) }
+    fn from(n: u64) -> Self {
+        Self::U64(n)
+    }
 }
 
 #[derive(Default)]

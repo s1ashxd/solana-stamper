@@ -12,8 +12,8 @@ fn bench_stamp_keypair(c: &mut Criterion) {
     let signer = KeypairSigner::from_bytes(&[3u8; 32]);
     let payer = signer.pubkey();
     let recipient = Pubkey::new_unique();
-    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
-        InstructionSpec::new(Pubkey::default())
+    let spec =
+        TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
             .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
@@ -35,8 +35,8 @@ fn bench_stamp_precomputed(c: &mut Criterion) {
     let signer = PrecomputedSigner::new(&[3u8; 32], 4096);
     let payer = signer.pubkey();
     let recipient = Pubkey::new_unique();
-    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
-        InstructionSpec::new(Pubkey::default())
+    let spec =
+        TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
             .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));

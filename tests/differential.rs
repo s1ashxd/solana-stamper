@@ -43,12 +43,10 @@ fn transfer_byte_equal_to_manual_build() {
     };
     let manual_bytes = bincode::serialize(&sdk_versioned).unwrap();
 
-    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
-        InstructionSpec::new(program_id)
-            .account(Acc::payer())
-            .account(Acc::slot_w("recipient"))
-            .data(DataSpec::bytes(&2u32.to_le_bytes()).u64_slot("amount")),
-    );
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(program_id)
+        .account(Acc::payer())
+        .account(Acc::slot_w("recipient"))
+        .data(DataSpec::bytes(&2u32.to_le_bytes()).u64_slot("amount")));
     let tpl = Template::compile(spec).unwrap();
     let stamped = tpl
         .stamp()

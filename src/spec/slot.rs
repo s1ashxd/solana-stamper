@@ -10,5 +10,7 @@ pub enum SlotKind {
 
 #[macro_export]
 macro_rules! slot {
-    ($name:literal) => { $name };
+    ($name:literal) => {
+        $name
+    };
 }

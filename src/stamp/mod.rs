@@ -9,7 +9,9 @@ use solana_sdk::pubkey::Pubkey;
 
 use crate::error::StamperError;
 use crate::signer::Signer;
-use crate::stamp::patch::{patch_hash, patch_pubkey, patch_sig, patch_u8, patch_u16, patch_u32, patch_u64};
+use crate::stamp::patch::{
+    patch_hash, patch_pubkey, patch_sig, patch_u8, patch_u16, patch_u32, patch_u64,
+};
 use crate::stamp::values::{ResolvedSlots, SlotValue};
 use crate::stamped::StampedTx;
 use crate::template::{PatchKind, Template};
@@ -23,7 +25,11 @@ pub struct StampBuilder<'t> {
 impl Template {
     #[must_use]
     pub fn stamp(&self) -> StampBuilder<'_> {
-        StampBuilder { template: self, values: BTreeMap::new(), blockhash: None }
+        StampBuilder {
+            template: self,
+            values: BTreeMap::new(),
+            blockhash: None,
+        }
     }
 }
 
@@ -44,12 +50,24 @@ impl StampBuilder<'_> {
         self.sign_inner(primary, &[])
     }
 
-    pub fn sign_with(self, primary: &dyn Signer, extras: &[&dyn Signer]) -> Result<StampedTx, StamperError> {
+    pub fn sign_with(
+        self,
+        primary: &dyn Signer,
+        extras: &[&dyn Signer],
+    ) -> Result<StampedTx, StamperError> {
         self.sign_inner(primary, extras)
     }
 
-    fn sign_inner(self, primary: &dyn Signer, extras: &[&dyn Signer]) -> Result<StampedTx, StamperError> {
-        let Self { template, values, blockhash } = self;
+    fn sign_inner(
+        self,
+        primary: &dyn Signer,
+        extras: &[&dyn Signer],
+    ) -> Result<StampedTx, StamperError> {
+        let Self {
+            template,
+            values,
+            blockhash,
+        } = self;
 
         if primary.pubkey() != *template.payer() {
             return Err(StamperError::SignerMismatch {
@@ -75,7 +93,10 @@ impl StampBuilder<'_> {
         }
         for computed in template.computed() {
             let pk = (computed.compute)(&resolved, template.payer()).map_err(|source| {
-                StamperError::ComputeFailed { name: computed.name.clone(), source: Box::new(source) }
+                StamperError::ComputeFailed {
+                    name: computed.name.clone(),
+                    source: Box::new(source),
+                }
             })?;
             resolved.insert(computed.name.clone(), pk);
             for op in &computed.patches {
@@ -84,24 +105,37 @@ impl StampBuilder<'_> {
         }
 
         for (name, value) in &values {
-            let slot = template
-                .slot_table
-                .get(name)
-                .ok_or_else(|| StamperError::MissingSlotValue {
-                    name: name.clone(),
-                    required_by: Vec::new(),
-                })?;
+            let slot =
+                template
+                    .slot_table
+                    .get(name)
+                    .ok_or_else(|| StamperError::MissingSlotValue {
+                        name: name.clone(),
+                        required_by: Vec::new(),
+                    })?;
             if slot.per_provider {
                 return Err(StamperError::PerProviderInSingleStamp { name: name.clone() });
             }
             for op in &slot.patches {
                 match (op.kind, value) {
-                    (PatchKind::Pubkey32, SlotValue::Pubkey(b)) => patch_pubkey(&mut buf, usize::from(op.offset), b),
-                    (PatchKind::Hash32, SlotValue::Hash(b)) => patch_hash(&mut buf, usize::from(op.offset), b),
-                    (PatchKind::U8, SlotValue::U8(n)) => patch_u8(&mut buf, usize::from(op.offset), *n),
-                    (PatchKind::U16, SlotValue::U16(n)) => patch_u16(&mut buf, usize::from(op.offset), *n),
-                    (PatchKind::U32, SlotValue::U32(n)) => patch_u32(&mut buf, usize::from(op.offset), *n),
-                    (PatchKind::U64, SlotValue::U64(n)) => patch_u64(&mut buf, usize::from(op.offset), *n),
+                    (PatchKind::Pubkey32, SlotValue::Pubkey(b)) => {
+                        patch_pubkey(&mut buf, usize::from(op.offset), b)
+                    }
+                    (PatchKind::Hash32, SlotValue::Hash(b)) => {
+                        patch_hash(&mut buf, usize::from(op.offset), b)
+                    }
+                    (PatchKind::U8, SlotValue::U8(n)) => {
+                        patch_u8(&mut buf, usize::from(op.offset), *n)
+                    }
+                    (PatchKind::U16, SlotValue::U16(n)) => {
+                        patch_u16(&mut buf, usize::from(op.offset), *n)
+                    }
+                    (PatchKind::U32, SlotValue::U32(n)) => {
+                        patch_u32(&mut buf, usize::from(op.offset), *n)
+                    }
+                    (PatchKind::U64, SlotValue::U64(n)) => {
+                        patch_u64(&mut buf, usize::from(op.offset), *n)
+                    }
                     _ => {
                         return Err(StamperError::WrongSlotType {
                             name: name.clone(),
@@ -123,7 +157,11 @@ impl StampBuilder<'_> {
             let idx = i + 1;
             let off = template.sig_offs.get(idx).copied().ok_or_else(|| {
                 StamperError::MissingAdditionalSigner {
-                    name: template.additional_signer_names().get(i).cloned().unwrap_or_default(),
+                    name: template
+                        .additional_signer_names()
+                        .get(i)
+                        .cloned()
+                        .unwrap_or_default(),
                 }
             })?;
             let sig = {
@@ -133,6 +171,10 @@ impl StampBuilder<'_> {
             patch_sig(&mut buf, usize::from(off), &sig);
         }
 
-        Ok(StampedTx { buf, len: template.len, sig_off: template.sig_offs[0] })
+        Ok(StampedTx {
+            buf,
+            len: template.len,
+            sig_off: template.sig_offs[0],
+        })
     }
 }
