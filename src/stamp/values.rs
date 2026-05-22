@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
-use smallvec::SmallVec;
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::error::StamperError;
+use crate::spec::slot::SlotKind;
 
 #[derive(Debug, Clone)]
 pub enum SlotValue {
@@ -14,7 +14,20 @@ pub enum SlotValue {
     U16(u16),
     U32(u32),
     U64(u64),
-    Bytes(SmallVec<[u8; 32]>),
+}
+
+impl SlotValue {
+    #[must_use]
+    pub fn kind(&self) -> SlotKind {
+        match self {
+            Self::Pubkey(_) => SlotKind::Pubkey,
+            Self::Hash(_) => SlotKind::Hash,
+            Self::U8(_) => SlotKind::U8,
+            Self::U16(_) => SlotKind::U16,
+            Self::U32(_) => SlotKind::U32,
+            Self::U64(_) => SlotKind::U64,
+        }
+    }
 }
 
 impl From<Pubkey> for SlotValue {

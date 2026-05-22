@@ -105,15 +105,17 @@ impl StampBuilder<'_> {
                         return Err(StamperError::WrongSlotType {
                             name: name.clone(),
                             expected: slot.kind,
-                            got: slot.kind,
+                            got: value.kind(),
                         });
                     }
                 }
             }
         }
 
-        let msg_bytes: Vec<u8> = buf[usize::from(template.msg_start)..usize::from(template.len)].to_vec();
-        let primary_sig = primary.sign(&msg_bytes);
+        let primary_sig = {
+            let msg_bytes = &buf[usize::from(template.msg_start)..usize::from(template.len)];
+            primary.sign(msg_bytes)
+        };
         patch_sig(&mut buf, usize::from(template.sig_offs[0]), &primary_sig);
 
         for (i, extra) in extras.iter().enumerate() {
@@ -123,7 +125,10 @@ impl StampBuilder<'_> {
                     name: template.additional_signer_names().get(i).cloned().unwrap_or_default(),
                 }
             })?;
-            let sig = extra.sign(&msg_bytes);
+            let sig = {
+                let msg_bytes = &buf[usize::from(template.msg_start)..usize::from(template.len)];
+                extra.sign(msg_bytes)
+            };
             patch_sig(&mut buf, usize::from(off), &sig);
         }
 
