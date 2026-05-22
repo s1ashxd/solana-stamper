@@ -1,6 +1,7 @@
 use tx_stamper::slot;
 use tx_stamper::spec::slot::SlotKind;
 use tx_stamper::spec::account::{Acc, AccountFlags};
+use tx_stamper::spec::data::{DataSpec, DataPiece};
 use solana_sdk::pubkey::Pubkey;
 
 #[test]
@@ -26,4 +27,20 @@ fn acc_constructors() {
     if let Acc::Slot { flags, .. } = w {
         assert!(flags.writable);
     } else { panic!() }
+}
+
+#[test]
+fn data_spec_chained_builders() {
+    let d = DataSpec::bytes(&[0x01, 0x02])
+        .u64_slot("sol_amount")
+        .u64_slot("min_tokens_out");
+    assert_eq!(d.0.len(), 3);
+    assert!(matches!(d.0[0], DataPiece::Bytes(_)));
+    assert!(matches!(d.0[1], DataPiece::U64Slot(_)));
+}
+
+#[test]
+fn data_spec_disc_alias() {
+    let d = DataSpec::disc(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(d.0.len(), 1);
 }
