@@ -213,7 +213,28 @@ impl EnvelopeTemplate {
         };
 
         out.extend_from_slice(&self.buf[body_off + body_max..body_off + body_max + suffix_len]);
-        let _ = encoded_len;
+
+        if let Some(cl_off) = self.cl_off {
+            let cl_off_u = cl_off as usize;
+            let cl_width = self.cl_width as usize;
+            let out_cl_off = if cl_off_u >= body_off + body_max {
+                body_off + encoded_len + (cl_off_u - body_off - body_max)
+            } else {
+                cl_off_u
+            };
+            let digits = format!("{encoded_len}");
+            if digits.len() > cl_width {
+                return Err(StamperError::ContentLengthOverflow {
+                    value: encoded_len,
+                    width: self.cl_width,
+                });
+            }
+            let pad_len = cl_width - digits.len();
+            for i in 0..pad_len {
+                out[out_cl_off + i] = b' ';
+            }
+            out[out_cl_off + pad_len..out_cl_off + cl_width].copy_from_slice(digits.as_bytes());
+        }
         Ok(&out[..])
     }
 
