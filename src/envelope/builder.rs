@@ -41,18 +41,17 @@ impl EnvelopeSpecBuilder {
     }
 
     #[must_use]
-    #[allow(clippy::match_same_arms)]
-    pub fn body_json_rpc(mut self, encoding: BodyEncoding, max_body_bytes: usize) -> Self {
-        self.body_template = Some(format!(
-            r#"{{"jsonrpc":"2.0","id":1,"method":"sendTransaction","params":["<<BODY>>",{{"encoding":"{}","skipPreflight":true,"maxRetries":0}}]}}"#,
-            match encoding {
-                BodyEncoding::Base64 => "base64",
-                BodyEncoding::Binary => "base64",
-            }
-        ));
+    pub fn body_json_rpc(mut self, max_body_bytes: usize) -> Self {
+        self.body_template = Some(
+            r#"{"jsonrpc":"2.0","id":1,"method":"sendTransaction","params":["<<BODY>>",{"encoding":"base64","skipPreflight":true,"maxRetries":0}]}"#.to_string()
+        );
         let mut sentinel: SmallVec<[u8; 16]> = SmallVec::new();
         sentinel.extend_from_slice(b"<<BODY>>");
-        self.body = Some(BodyPlaceholder { sentinel, max_len: max_body_bytes, encoding });
+        self.body = Some(BodyPlaceholder {
+            sentinel,
+            max_len: max_body_bytes,
+            encoding: BodyEncoding::Base64,
+        });
         let mut cl: SmallVec<[u8; 16]> = SmallVec::new();
         cl.extend_from_slice(b"<<CL>>        ");
         self.content_length = Some(ContentLengthSpec { sentinel: cl, width: 12 });

@@ -398,7 +398,7 @@ fn http_post_builder_constructs_valid_spec() {
         .host("rpc.example.com")
         .header("Content-Type", "application/json")
         .header("X-Auth", "<<AUTH>>")
-        .body_json_rpc(BodyEncoding::Base64, 4096)
+        .body_json_rpc(4096)
         .user_slot("UUID", b"<<UUID>>")
         .user_slot("AUTH", b"<<AUTH>>")
         .build();
