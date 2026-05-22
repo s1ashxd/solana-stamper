@@ -10,11 +10,6 @@ pub struct ResolvedSlots {
 }
 
 impl ResolvedSlots {
-    /// Returns the pubkey for the named slot.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StamperError::MissingSlotValue`] if the slot has not been resolved.
     pub fn try_pubkey(&self, name: &str) -> Result<Pubkey, StamperError> {
         self.inner
             .get(name)
