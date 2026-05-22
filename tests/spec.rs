@@ -1,5 +1,17 @@
 use tx_stamper::slot;
 use tx_stamper::spec::slot::SlotKind;
+use tx_stamper::stamp::values::SlotValue;
+
+#[test]
+fn slot_value_from_impls() {
+    let pk = solana_sdk::pubkey::Pubkey::new_unique();
+    let v: SlotValue = pk.into();
+    assert!(matches!(v, SlotValue::Pubkey(_)));
+    let v: SlotValue = 100u64.into();
+    assert!(matches!(v, SlotValue::U64(_)));
+    let v: SlotValue = 50u32.into();
+    assert!(matches!(v, SlotValue::U32(_)));
+}
 use tx_stamper::spec::account::Acc;
 use tx_stamper::spec::data::{DataSpec, DataPiece};
 use tx_stamper::spec::prefix::{ComputeBudgetSlots, PrefixOptions};
