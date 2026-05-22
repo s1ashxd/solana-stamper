@@ -7,3 +7,8 @@ pub enum SlotKind {
     U64,
     Hash,
 }
+
+#[macro_export]
+macro_rules! slot {
+    ($name:literal) => { $name };
+}
