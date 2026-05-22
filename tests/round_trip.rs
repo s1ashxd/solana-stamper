@@ -21,3 +21,20 @@ fn keypair_signer_round_trip() {
     let dalek_sig = ed25519_dalek::Signature::from_bytes(&sig);
     assert!(vk.verify(msg, &dalek_sig).is_ok());
 }
+
+use tx_stamper::signer::PrecomputedSigner;
+
+#[test]
+fn precomputed_signer_signs_many() {
+    let secret = [7u8; 32];
+    let signer = PrecomputedSigner::new(&secret, 8);
+    let kp = KeypairSigner::from_bytes(&secret);
+    assert_eq!(signer.pubkey(), kp.pubkey());
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(&signer.pubkey().to_bytes()).unwrap();
+    for i in 0..32u32 {
+        let msg = i.to_le_bytes();
+        let sig = signer.sign(&msg);
+        let dalek_sig = ed25519_dalek::Signature::from_bytes(&sig);
+        assert!(vk.verify(&msg, &dalek_sig).is_ok(), "iteration {i}");
+    }
+}
