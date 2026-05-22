@@ -346,6 +346,24 @@ fn envelope_splice_zero_alloc_on_repeat() {
 }
 
 #[test]
+fn envelope_compile_max_len_below_sentinel_errors() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let spec = EnvelopeSpec {
+        bytes: b"prefix-<<BODY>>-suffix".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4,
+            encoding: BodyEncoding::Binary,
+        },
+        content_length: None,
+        user_slots: SmallVec::new(),
+    };
+    let err = EnvelopeTemplate::compile(spec).err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::BodyMaxTooSmall { .. }));
+}
+
+#[test]
 fn http_post_builder_constructs_valid_spec() {
     let spec = EnvelopeSpecBuilder::http_post("/api/v1/transactions?uuid=<<UUID>>")
         .host("rpc.example.com")

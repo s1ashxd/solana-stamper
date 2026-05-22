@@ -19,6 +19,13 @@ pub struct EnvelopeTemplate {
 
 impl EnvelopeTemplate {
     pub fn compile(mut spec: EnvelopeSpec) -> Result<Self, StamperError> {
+        let sentinel_len_check = spec.body.sentinel.len();
+        if spec.body.max_len < sentinel_len_check {
+            return Err(StamperError::BodyMaxTooSmall {
+                max_len: spec.body.max_len,
+                sentinel: sentinel_len_check,
+            });
+        }
         let body_off = find_unique(&spec.bytes, &spec.body.sentinel)
             .map_err(|_| StamperError::EnvelopeBodyMissing)?;
 

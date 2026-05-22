@@ -91,4 +91,7 @@ pub enum StamperError {
 
     #[error("envelope user slot {name} not declared")]
     UnknownUserSlot { name: String },
+
+    #[error("envelope body max_len {max_len} is smaller than sentinel length {sentinel}")]
+    BodyMaxTooSmall { max_len: usize, sentinel: usize },
 }
