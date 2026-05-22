@@ -6,7 +6,6 @@ use crate::envelope::spec::{BodyEncoding, EnvelopeSpec};
 use crate::error::StamperError;
 use crate::stamped::StampedTx;
 
-#[allow(dead_code)]
 pub struct EnvelopeTemplate {
     buf: Vec<u8>,
     body_off: u32,
@@ -131,6 +130,29 @@ impl EnvelopeTemplate {
         }
 
         Ok(&self.buf[..real_len])
+    }
+
+    pub fn set_user(&mut self, name: &str, value: &[u8]) -> Result<&mut Self, StamperError> {
+        let (start, end) = {
+            let range = self.user_slots.get(name).ok_or_else(|| StamperError::UnknownUserSlot {
+                name: name.to_string(),
+            })?;
+            (range.start, range.end)
+        };
+        let sentinel_len = (end - start) as usize;
+        if value.len() > sentinel_len {
+            return Err(StamperError::UserSlotOverflow {
+                name: name.to_string(),
+                value: value.len(),
+                sentinel: sentinel_len,
+            });
+        }
+        let start = start as usize;
+        self.buf[start..start + value.len()].copy_from_slice(value);
+        for i in value.len()..sentinel_len {
+            self.buf[start + i] = b' ';
+        }
+        Ok(self)
     }
 
     pub fn splice_into<'a>(&self, tx: &StampedTx, out: &'a mut Vec<u8>) -> Result<&'a [u8], StamperError> {

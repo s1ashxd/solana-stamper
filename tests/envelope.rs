@@ -199,3 +199,66 @@ fn envelope_content_length_overflow_errors() {
     let err = env.splice(&stamped).err().unwrap();
     assert!(matches!(err, tx_stamper::error::StamperError::ContentLengthOverflow { .. }));
 }
+
+#[test]
+fn envelope_user_slot_set_and_splice() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let mut uuid_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    uuid_sentinel.extend_from_slice(b"<<UUID>>");
+    let stamped = make_stamped();
+    let spec = EnvelopeSpec {
+        bytes: b"auth=<<UUID>>;body=<<BODY>>;".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Binary,
+        },
+        content_length: None,
+        user_slots: smallvec::smallvec![UserSlot { name: "uuid", sentinel: uuid_sentinel }],
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    env.set_user("uuid", b"deadbeef").unwrap();
+    let wire = env.splice(&stamped).unwrap();
+    assert!(wire.windows(8).any(|w| w == b"deadbeef"));
+}
+
+#[test]
+fn envelope_user_slot_value_too_large_errors() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let mut uuid_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    uuid_sentinel.extend_from_slice(b"<<U>>");
+    let spec = EnvelopeSpec {
+        bytes: b"<<U>>+<<BODY>>".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 4096,
+            encoding: BodyEncoding::Binary,
+        },
+        content_length: None,
+        user_slots: smallvec::smallvec![UserSlot { name: "u", sentinel: uuid_sentinel }],
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let err = env.set_user("u", b"too-long-for-5-byte-sentinel").err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::UserSlotOverflow { .. }));
+}
+
+#[test]
+fn envelope_user_slot_unknown_errors() {
+    let mut body_sentinel: SmallVec<[u8; 16]> = SmallVec::new();
+    body_sentinel.extend_from_slice(b"<<BODY>>");
+    let spec = EnvelopeSpec {
+        bytes: b"<<BODY>>".to_vec(),
+        body: BodyPlaceholder {
+            sentinel: body_sentinel,
+            max_len: 100,
+            encoding: BodyEncoding::Binary,
+        },
+        content_length: None,
+        user_slots: SmallVec::new(),
+    };
+    let mut env = EnvelopeTemplate::compile(spec).unwrap();
+    let err = env.set_user("nope", b"x").err().unwrap();
+    assert!(matches!(err, tx_stamper::error::StamperError::UnknownUserSlot { .. }));
+}
