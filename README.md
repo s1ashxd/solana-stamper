@@ -33,6 +33,44 @@ let bytes = stamped.as_bytes();
 let base64 = stamped.to_base64();
 ```
 
+## Protocol presets
+
+Pre-built `TemplateSpec` builders for common Solana protocols. Each protocol
+is gated behind a Cargo feature.
+
+| Protocol | Functions | Feature |
+| --- | --- | --- |
+| PumpFun | `buy_v2_spec`, `sell_v2_spec` | `pumpfun` |
+| PumpSwap | `buy_v2_spec` | `pumpswap` |
+| DAMM v2 | `swap_spec` | `damm-v2` |
+| Printr (with ALT) | `buy_spec`, `sell_spec` | `printr` |
+
+Enable individual features or use `all-protocols` for the full set:
+
+```toml
+[dependencies]
+tx-stamper = { version = "0.1", features = ["pumpfun", "pumpswap"] }
+```
+
+Each preset configures the canonical program ID, fixed accounts, discriminator,
+and a compute-budget + tip-transfer prefix. Per-trade values (mint, pool, vaults,
+amounts) are exposed as named slots set at stamp time:
+
+```rust
+use tx_stamper::protocols::common::TokenProgram;
+use tx_stamper::protocols::pumpfun::buy_v2_spec;
+use tx_stamper::template::Template;
+
+let spec = buy_v2_spec(signer.pubkey(), TokenProgram::Legacy);
+let template = Template::compile(spec)?;
+
+let stamped = template.stamp()
+    .set("mint", mint_pubkey)
+    .set("amount", 1_000_000u64)
+    .blockhash(recent_blockhash)
+    .sign(&signer)?;
+```
+
 ## Status
 
 Early development. API unstable.
