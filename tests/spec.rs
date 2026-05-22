@@ -4,6 +4,8 @@ use tx_stamper::spec::account::{Acc, AccountFlags};
 use tx_stamper::spec::data::{DataSpec, DataPiece};
 use tx_stamper::spec::prefix::{ComputeBudgetSlots, NonceConfig, PrefixOptions, TipTransferSlots, AuthoritySource};
 use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
+use tx_stamper::spec::{TemplateSpec, MessageVersion};
+use tx_stamper::spec::instruction::InstructionSpec;
 use solana_sdk::pubkey::Pubkey;
 
 #[test]
@@ -69,4 +71,16 @@ fn lookup_table_address_source() {
     let pk = solana_sdk::pubkey::Pubkey::new_unique();
     let _ = AddressSource::Fixed(pk);
     let _ = LookupTableSpec { address: AddressSource::Fixed(pk), keys: smallvec::SmallVec::new() };
+}
+
+#[test]
+fn template_spec_builder_minimal() {
+    let payer = solana_sdk::pubkey::Pubkey::new_unique();
+    let program = solana_sdk::pubkey::Pubkey::new_unique();
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .ix(InstructionSpec::new(program)
+            .account(Acc::payer())
+            .data(DataSpec::bytes(&[0xAB])));
+    assert_eq!(spec.ixs.len(), 1);
+    assert_eq!(spec.payer, payer);
 }
