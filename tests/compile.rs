@@ -174,3 +174,28 @@ fn find_unique_errors_on_multiple_matches() {
     let haystack = b"\xC0\xC0\xC0\xC0";
     assert!(find_unique(haystack, &[0xC0, 0xC0]).is_err());
 }
+
+use tx_stamper::template::{PatchKind, PatchOp, PatchSlot};
+use tx_stamper::spec::slot::SlotKind;
+use smallvec::smallvec;
+
+#[test]
+fn patch_op_size_correct() {
+    let op = PatchOp { offset: 100, kind: PatchKind::Pubkey32 };
+    assert_eq!(op.len(), 32);
+    let op = PatchOp { offset: 100, kind: PatchKind::U64 };
+    assert_eq!(op.len(), 8);
+}
+
+#[test]
+fn patch_slot_aggregates_patches() {
+    let slot = PatchSlot {
+        kind: SlotKind::Pubkey,
+        patches: smallvec![
+            PatchOp { offset: 64, kind: PatchKind::Pubkey32 },
+            PatchOp { offset: 128, kind: PatchKind::Pubkey32 },
+        ],
+        per_provider: false,
+    };
+    assert_eq!(slot.patches.len(), 2);
+}
