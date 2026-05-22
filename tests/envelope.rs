@@ -1,4 +1,5 @@
 use smallvec::SmallVec;
+use tx_stamper::envelope::builder::EnvelopeSpecBuilder;
 use tx_stamper::envelope::spec::{BodyEncoding, BodyPlaceholder, ContentLengthSpec, EnvelopeSpec, UserSlot};
 use tx_stamper::envelope::template::EnvelopeTemplate;
 use solana_sdk::hash::Hash;
@@ -342,4 +343,18 @@ fn envelope_splice_zero_alloc_on_repeat() {
     let _ = env.splice(&stamped).unwrap();
     let cap_after = env.buf_capacity();
     assert_eq!(cap_before, cap_after);
+}
+
+#[test]
+fn http_post_builder_constructs_valid_spec() {
+    let spec = EnvelopeSpecBuilder::http_post("/api/v1/transactions?uuid=<<UUID>>")
+        .host("rpc.example.com")
+        .header("Content-Type", "application/json")
+        .header("X-Auth", "<<AUTH>>")
+        .body_json_rpc(BodyEncoding::Base64, 4096)
+        .user_slot("UUID", b"<<UUID>>")
+        .user_slot("AUTH", b"<<AUTH>>")
+        .build();
+    let env = EnvelopeTemplate::compile(spec).unwrap();
+    assert!(env.body_max() >= 4096);
 }
