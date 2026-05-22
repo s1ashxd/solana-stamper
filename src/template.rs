@@ -18,6 +18,7 @@ use crate::spec::account::Acc;
 use crate::spec::account::DeriveFn;
 use crate::spec::data::DataPiece;
 use crate::spec::slot::SlotKind;
+use crate::spec::prefix::AuthoritySource;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatchKind {
@@ -117,6 +118,50 @@ impl Template {
 
         let blockhash_sentinel = Hash::new_from_array(alloc.hash_sentinel());
         let mut resolved_ixs: Vec<Instruction> = Vec::new();
+
+        if let Some(nonce_cfg) = spec.prefix.advance_nonce {
+            let nonce_acc_sentinel = Pubkey::new_from_array(alloc.pubkey_sentinel());
+            ctx.slot_sentinels_mut().insert(nonce_cfg.account_slot.to_string(), nonce_acc_sentinel);
+            slot_kinds.insert(nonce_cfg.account_slot.to_string(), SlotKind::Pubkey);
+            per_provider_flags.insert(nonce_cfg.account_slot.to_string(), false);
+            let authority_pk = match nonce_cfg.authority {
+                AuthoritySource::Payer => spec.payer,
+                AuthoritySource::Fixed(pk) => pk,
+                AuthoritySource::Slot(name) => {
+                    let sentinel = Pubkey::new_from_array(alloc.pubkey_sentinel());
+                    ctx.slot_sentinels_mut().insert(name.to_string(), sentinel);
+                    slot_kinds.insert(name.to_string(), SlotKind::Pubkey);
+                    per_provider_flags.insert(name.to_string(), false);
+                    sentinel
+                }
+            };
+            resolved_ixs.push(solana_system_interface::instruction::advance_nonce_account(&nonce_acc_sentinel, &authority_pk));
+        }
+
+        if let Some(cb) = spec.prefix.compute_budget {
+            let limit_mag = alloc.u32_magic();
+            u32_sentinels.insert(cb.limit_slot.to_string(), limit_mag);
+            slot_kinds.insert(cb.limit_slot.to_string(), SlotKind::U32);
+            per_provider_flags.insert(cb.limit_slot.to_string(), false);
+            let price_mag = alloc.u64_magic();
+            u64_sentinels.insert(cb.price_slot.to_string(), price_mag);
+            slot_kinds.insert(cb.price_slot.to_string(), SlotKind::U64);
+            per_provider_flags.insert(cb.price_slot.to_string(), false);
+            resolved_ixs.push(solana_compute_budget_interface::ComputeBudgetInstruction::set_compute_unit_limit(limit_mag));
+            resolved_ixs.push(solana_compute_budget_interface::ComputeBudgetInstruction::set_compute_unit_price(price_mag));
+        }
+
+        if let Some(tip) = spec.prefix.tip_transfer {
+            let tip_acc_sentinel = Pubkey::new_from_array(alloc.pubkey_sentinel());
+            ctx.slot_sentinels_mut().insert(tip.account_slot.to_string(), tip_acc_sentinel);
+            slot_kinds.insert(tip.account_slot.to_string(), SlotKind::Pubkey);
+            per_provider_flags.insert(tip.account_slot.to_string(), tip.per_provider);
+            let lam_mag = alloc.u64_magic();
+            u64_sentinels.insert(tip.lamports_slot.to_string(), lam_mag);
+            slot_kinds.insert(tip.lamports_slot.to_string(), SlotKind::U64);
+            per_provider_flags.insert(tip.lamports_slot.to_string(), tip.per_provider);
+            resolved_ixs.push(solana_system_interface::instruction::transfer(&spec.payer, &tip_acc_sentinel, lam_mag));
+        }
 
         for ix in &spec.ixs {
             let mut metas: Vec<AccountMeta> = Vec::new();

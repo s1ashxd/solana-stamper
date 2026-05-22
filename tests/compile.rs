@@ -216,3 +216,55 @@ fn compile_simple_transfer_spec() {
     assert!(tpl.slot_names().any(|n| n == "recipient"));
     assert!(tpl.slot_names().any(|n| n == "amount"));
 }
+
+use tx_stamper::spec::prefix::{AuthoritySource, ComputeBudgetSlots, NonceConfig, PrefixOptions, TipTransferSlots};
+
+#[test]
+fn compile_with_compute_budget_prefix() {
+    let payer = Pubkey::new_unique();
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(PrefixOptions::default().with_compute_budget(ComputeBudgetSlots {
+            limit_slot: "cu_limit",
+            price_slot: "cu_price",
+        }))
+        .ix(InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl = tx_stamper::template::Template::compile(spec).unwrap();
+    assert!(tpl.slot_names().any(|n| n == "cu_limit"));
+    assert!(tpl.slot_names().any(|n| n == "cu_price"));
+}
+
+#[test]
+fn compile_with_tip_transfer_prefix() {
+    let payer = Pubkey::new_unique();
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(PrefixOptions::default().with_tip_transfer(TipTransferSlots {
+            account_slot: "tip_account",
+            lamports_slot: "tip_lamports",
+            per_provider: true,
+        }))
+        .ix(InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl = tx_stamper::template::Template::compile(spec).unwrap();
+    assert!(tpl.slot_names().any(|n| n == "tip_account"));
+}
+
+#[test]
+fn compile_with_nonce_prefix() {
+    let payer = Pubkey::new_unique();
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(PrefixOptions::default().with_advance_nonce(NonceConfig {
+            account_slot: "nonce_account",
+            authority: AuthoritySource::Payer,
+        }))
+        .ix(InstructionSpec::new(Pubkey::default())
+            .account(Acc::payer())
+            .account(Acc::slot_w("recipient"))
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+    let tpl = tx_stamper::template::Template::compile(spec).unwrap();
+    assert!(tpl.slot_names().any(|n| n == "nonce_account"));
+}

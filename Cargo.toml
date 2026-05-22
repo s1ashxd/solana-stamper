@@ -8,6 +8,7 @@ description = "V0 Solana transaction templates with byte-level re-stamping."
 [dependencies]
 solana-sdk = "3"
 solana-system-interface = { version = "2", features = ["bincode"] }
+solana-compute-budget-interface = "3"
 bincode = "1.3"
 thiserror = "2"
 smallvec = "1"
