@@ -10,5 +10,4 @@ pub const PUMPFUN_FEE_CONFIG: Pubkey = solana_sdk::pubkey!("8Wf5TiAheLUqBrKXeYg2
 pub const PUMPFUN_FEE_PROGRAM: Pubkey = solana_sdk::pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
 
 pub const BUY_EXACT_SOL_IN_DISC: [u8; 8] = [56, 252, 116, 8, 158, 223, 205, 95];
-pub const BUY_DISC: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];
 pub const SELL_DISC: [u8; 8] = [51, 230, 133, 164, 1, 127, 131, 173];
