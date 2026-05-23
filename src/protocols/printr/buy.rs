@@ -67,7 +67,6 @@ pub fn buy_spec(payer: Pubkey, base_token_program: TokenProgram) -> TemplateSpec
     let lut = LookupTableSpec {
         address: AddressSource::Slot("printr_lut"),
         keys: vec![
-            Acc::fixed(PRINTR_PROGRAM),
             Acc::fixed(WSOL_MINT),
             Acc::fixed(printr_authority()),
             Acc::fixed(dbc_event_authority()),
