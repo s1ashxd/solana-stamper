@@ -24,6 +24,8 @@ spl-associated-token-account = { version = "8", optional = true }
 [dev-dependencies]
 proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
+solana-client = "3"
+solana-commitment-config = "3"
 
 [features]
 pumpfun = ["dep:spl-associated-token-account"]
@@ -31,6 +33,10 @@ pumpswap = ["dep:spl-associated-token-account"]
 damm-v2 = ["dep:spl-associated-token-account"]
 printr = ["dep:spl-associated-token-account"]
 all-protocols = ["pumpfun", "pumpswap", "damm-v2", "printr"]
+
+[[example]]
+name = "simulate_presets"
+required-features = ["all-protocols"]
 
 [[bench]]
 name = "stamp"
