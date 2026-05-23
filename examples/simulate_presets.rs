@@ -34,6 +34,8 @@ const JITO_TIP: Pubkey = solana_sdk::pubkey!("96gYZGLRJq7Tq3wcKqSLwhKf3xn5GHHGzV
 const PRINTR_PARTNER_CONFIG: Pubkey =
     solana_sdk::pubkey!("A8gMrEPJkacWkcb3DGwtJwTe16HktSEfvwtuDh2MCtck");
 const PRINTR_LUT: Pubkey = solana_sdk::pubkey!("7RKtfATWCe98ChuwecNq8XCzAzfoK3DtZTprFsPMGtio");
+const PUMPSWAP_FEE_RECIPIENT: Pubkey =
+    solana_sdk::pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
 fn load_keypair_from_env() -> KeypairSigner {
     let Ok(path) = std::env::var("SOLANA_KEYPAIR") else {
@@ -210,22 +212,133 @@ fn simulate_pumpfun(rpc: &RpcClient, keypair: &KeypairSigner) {
     print_sim_result("PumpFun", &result);
 }
 
-fn simulate_pumpswap(_rpc: &RpcClient, keypair: &KeypairSigner) {
+fn simulate_pumpswap(rpc: &RpcClient, keypair: &KeypairSigner) {
     let payer = keypair.pubkey();
     let base_mint = PUMPSWAP_MINT;
 
-    let pool_v2 = pda(&[b"pool-v2", base_mint.as_ref()], &PUMPSWAP_PROGRAM);
+    let pump_pool_authority = pda(
+        &[b"pool-authority", base_mint.as_ref()],
+        &PUMPFUN_PROGRAM,
+    );
+    let index_le = 0u16.to_le_bytes();
+    let pool = pda(
+        &[
+            b"pool",
+            &index_le,
+            pump_pool_authority.as_ref(),
+            base_mint.as_ref(),
+            WSOL_MINT.as_ref(),
+        ],
+        &PUMPSWAP_PROGRAM,
+    );
+
+    let pool_data = match rpc.get_account_data(&pool) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("pumpswap: failed to fetch pool account: {e}");
+            return;
+        }
+    };
+    if pool_data.len() < 243 {
+        eprintln!(
+            "pumpswap: pool account data too short ({} bytes); pool not migrated or layout changed",
+            pool_data.len()
+        );
+        return;
+    }
+
+    let pool_base_ta = Pubkey::new_from_array(pool_data[139..171].try_into().unwrap());
+    let pool_quote_ta = Pubkey::new_from_array(pool_data[171..203].try_into().unwrap());
+    let coin_creator = Pubkey::new_from_array(pool_data[211..243].try_into().unwrap());
+
+    let coin_creator_vault_authority =
+        pda(&[b"creator_vault", coin_creator.as_ref()], &PUMPSWAP_PROGRAM);
+    let coin_creator_vault_ata = ata(&coin_creator_vault_authority, &WSOL_MINT, &TOKEN_PROGRAM);
+
+    let fee_recipient = PUMPSWAP_FEE_RECIPIENT;
+    let fee_recipient_ata = ata(&fee_recipient, &WSOL_MINT, &TOKEN_PROGRAM);
+
     let user_vol = pda(
         &[b"user_volume_accumulator", payer.as_ref()],
         &PUMPSWAP_PROGRAM,
     );
+    let pool_v2 = pda(&[b"pool-v2", base_mint.as_ref()], &PUMPSWAP_PROGRAM);
 
     println!("pumpswap slots:");
     println!("  base_mint: {base_mint}");
-    println!("  pool_v2: {pool_v2}");
+    println!("  pump_pool_authority: {pump_pool_authority}");
+    println!("  pool: {pool}");
+    println!("  pool_base_ta: {pool_base_ta}");
+    println!("  pool_quote_ta: {pool_quote_ta}");
+    println!("  coin_creator: {coin_creator}");
+    println!("  coin_creator_vault_authority: {coin_creator_vault_authority}");
+    println!("  coin_creator_vault_ata: {coin_creator_vault_ata}");
+    println!("  fee_recipient: {fee_recipient}");
+    println!("  fee_recipient_ata: {fee_recipient_ata}");
     println!("  user_vol: {user_vol}");
+    println!("  pool_v2: {pool_v2}");
 
-    panic!("PumpSwap pool address unavailable — populate manually for mint {base_mint}");
+    let spec = tx_stamper::protocols::pumpswap::buy_v2_spec(payer, TokenProgram::Legacy);
+    let tpl = match Template::compile(spec) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("pumpswap: compile error: {e}");
+            return;
+        }
+    };
+
+    let blockhash = match rpc.get_latest_blockhash() {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("pumpswap: get_latest_blockhash error: {e}");
+            return;
+        }
+    };
+
+    let provider = PerProviderValues {
+        slots: smallvec![
+            ("tip_account".to_string(), JITO_TIP.into()),
+            ("tip_lamports".to_string(), 1_000u64.into()),
+        ],
+    };
+
+    let bundle = match tpl
+        .stamp_bundle([provider])
+        .set("pool", pool)
+        .set("base_mint", base_mint)
+        .set("pool_base_ta", pool_base_ta)
+        .set("pool_quote_ta", pool_quote_ta)
+        .set("fee_recipient", fee_recipient)
+        .set("fee_recipient_ata", fee_recipient_ata)
+        .set("coin_creator_vault_ata", coin_creator_vault_ata)
+        .set("creator_vault_authority", coin_creator_vault_authority)
+        .set("user_vol", user_vol)
+        .set("pool_v2", pool_v2)
+        .set("quote_amount_in", 10_000u64)
+        .set("min_base_amount_out", 1u64)
+        .set("cu_limit", 200_000u32)
+        .set("cu_price", 100_000u64)
+        .blockhash(blockhash)
+        .sign(keypair)
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("pumpswap: stamp error: {e}");
+            return;
+        }
+    };
+
+    let stamped = bundle.reconstruct(0);
+    let tx: VersionedTransaction = match bincode::deserialize(stamped.as_bytes()) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("pumpswap: deserialize error: {e}");
+            return;
+        }
+    };
+
+    let result = rpc.simulate_transaction_with_config(&tx, sim_config());
+    print_sim_result("PumpSwap", &result);
 }
 
 fn simulate_damm_v2(rpc: &RpcClient, keypair: &KeypairSigner) {
@@ -494,21 +607,31 @@ fn main() {
     simulate_pumpfun(&rpc, &keypair);
     sleep(Duration::from_millis(500));
 
-    let pumpswap_result = std::panic::catch_unwind(AssertUnwindSafe(|| {
-        simulate_pumpswap(&rpc, &keypair);
+    simulate_pumpswap(&rpc, &keypair);
+    sleep(Duration::from_millis(500));
+
+    let damm_result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        simulate_damm_v2(&rpc, &keypair);
     }));
-    if let Err(e) = pumpswap_result {
+    if let Err(e) = damm_result {
         let msg = e
             .downcast_ref::<String>()
             .map(String::as_str)
             .or_else(|| e.downcast_ref::<&str>().copied())
             .unwrap_or("unknown panic");
-        eprintln!("=== PumpSwap ===\npanic: {msg}\n");
+        eprintln!("=== DAMM v2 ===\npanic: {msg}\n");
     }
     sleep(Duration::from_millis(500));
 
-    simulate_damm_v2(&rpc, &keypair);
-    sleep(Duration::from_millis(500));
-
-    simulate_printr(&rpc, &keypair);
+    let printr_result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        simulate_printr(&rpc, &keypair);
+    }));
+    if let Err(e) = printr_result {
+        let msg = e
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| e.downcast_ref::<&str>().copied())
+            .unwrap_or("unknown panic");
+        eprintln!("=== Printr ===\npanic: {msg}\n");
+    }
 }
