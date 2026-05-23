@@ -64,11 +64,24 @@ use tx_stamper::template::Template;
 let spec = buy_v2_spec(signer.pubkey(), TokenProgram::Legacy);
 let template = Template::compile(spec)?;
 
-let stamped = template.stamp()
+use smallvec::smallvec;
+use tx_stamper::stamp::bundle::PerProviderValues;
+
+let provider = PerProviderValues {
+    slots: smallvec![
+        ("tip_account".to_string(), tip_account.into()),
+        ("tip_lamports".to_string(), 100_000u64.into()),
+    ],
+};
+let bundle = template.stamp_bundle([provider])
     .set("mint", mint_pubkey)
-    .set("amount", 1_000_000u64)
+    .set("sol_amount", 1_000_000u64)
+    .set("min_tokens_out", 1u64)
+    // ... bonding_curve, associated_bonding_curve, creator_vault,
+    //     bonding_curve_v2, user_vol, cu_limit, cu_price ...
     .blockhash(recent_blockhash)
     .sign(&signer)?;
+let stamped = bundle.reconstruct(0);
 ```
 
 ## Status
