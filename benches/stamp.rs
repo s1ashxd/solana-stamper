@@ -32,24 +32,40 @@ fn bench_stamp_keypair(c: &mut Criterion) {
 }
 
 fn bench_stamp_precomputed(c: &mut Criterion) {
-    let signer = PrecomputedSigner::new(&[3u8; 32], 4096);
-    let payer = signer.pubkey();
+    use std::time::{Duration, Instant};
+    use criterion::black_box;
+
+    let payer = KeypairSigner::from_bytes(&[3u8; 32]).pubkey();
     let recipient = Pubkey::new_unique();
-    let spec =
-        TemplateSpec::new(payer, MessageVersion::V0).ix(InstructionSpec::new(Pubkey::default())
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(Pubkey::default())
             .account(Acc::payer())
             .account(Acc::slot_w("recipient"))
-            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")));
+            .data(DataSpec::bytes(&[2, 0, 0, 0]).u64_slot("amount")),
+    );
     let tpl = Template::compile(spec).unwrap();
     let blockhash = Hash::new_from_array([5u8; 32]);
+
     c.bench_function("stamp_precomputed", |b| {
-        b.iter(|| {
-            tpl.stamp()
-                .set("recipient", recipient)
-                .set("amount", 1_000u64)
-                .blockhash(blockhash)
-                .sign(&signer)
-                .unwrap()
+        b.iter_custom(|iters| {
+            let signer = PrecomputedSigner::new(&[3u8; 32], 4096);
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                if signer.pool_remaining() == 0 {
+                    signer.refill(4096);
+                }
+                let t0 = Instant::now();
+                let stamped = tpl
+                    .stamp()
+                    .set("recipient", recipient)
+                    .set("amount", 1_000u64)
+                    .blockhash(blockhash)
+                    .sign(&signer)
+                    .unwrap();
+                total += t0.elapsed();
+                black_box(stamped);
+            }
+            total
         });
     });
 }
