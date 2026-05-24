@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use smallvec::SmallVec;
 use solana_sdk::pubkey::Pubkey;
 
@@ -62,5 +64,49 @@ impl TemplateSpec {
     pub fn lut(mut self, l: LookupTable) -> Self {
         self.luts.push(l);
         self
+    }
+
+    #[must_use]
+    pub fn static_addresses(&self) -> Vec<Pubkey> {
+        let mut out = Vec::new();
+        let mut seen = HashSet::<Pubkey>::new();
+
+        macro_rules! push {
+            ($pk:expr) => {
+                if seen.insert($pk) {
+                    out.push($pk);
+                }
+            };
+        }
+
+        if self.prefix.advance_nonce.is_some() {
+            push!(solana_system_interface::program::ID);
+        }
+        if self.prefix.compute_budget.is_some() {
+            push!(solana_compute_budget_interface::id());
+        }
+        if self.prefix.tip_transfer.is_some() {
+            push!(solana_system_interface::program::ID);
+        }
+
+        for ix in &self.ixs {
+            push!(ix.program);
+            for acc in &ix.accounts {
+                if let crate::spec::account::Acc::Fixed(pk, _) = acc {
+                    push!(*pk);
+                }
+            }
+        }
+
+        out
+    }
+
+    #[must_use]
+    pub fn addresses_missing_from(&self, existing: &[Pubkey]) -> Vec<Pubkey> {
+        let existing_set: HashSet<&Pubkey> = existing.iter().collect();
+        self.static_addresses()
+            .into_iter()
+            .filter(|pk| !existing_set.contains(pk))
+            .collect()
     }
 }

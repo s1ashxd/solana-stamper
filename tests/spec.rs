@@ -100,3 +100,90 @@ fn template_spec_builder_minimal() {
     assert_eq!(spec.ixs.len(), 1);
     assert_eq!(spec.payer, payer);
 }
+
+#[test]
+fn static_addresses_collects_prefix_ix_and_fixed_accounts_dedup() {
+    use solana_sdk::pubkey::Pubkey;
+    use tx_stamper::spec::account::Acc;
+    use tx_stamper::spec::data::DataSpec;
+    use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::spec::prefix::{ComputeBudgetSlots, PrefixOptions, TipTransferSlots};
+    use tx_stamper::spec::{MessageVersion, TemplateSpec};
+
+    let payer = Pubkey::new_unique();
+    let program_a = Pubkey::new_unique();
+    let program_b = Pubkey::new_unique();
+    let shared_fixed = Pubkey::new_unique();
+    let only_in_b = Pubkey::new_unique();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0)
+        .prefix(
+            PrefixOptions::default()
+                .with_compute_budget(ComputeBudgetSlots {
+                    limit_slot: "cu_limit",
+                    price_slot: "cu_price",
+                })
+                .with_tip_transfer(TipTransferSlots {
+                    account_slot: "tip",
+                    lamports_slot: "lam",
+                    per_provider: true,
+                }),
+        )
+        .ix(
+            InstructionSpec::new(program_a)
+                .account(Acc::fixed(shared_fixed))
+                .account(Acc::payer())
+                .account(Acc::slot("a_slot"))
+                .data(DataSpec::bytes(&[1])),
+        )
+        .ix(
+            InstructionSpec::new(program_b)
+                .account(Acc::fixed(shared_fixed))
+                .account(Acc::fixed(only_in_b))
+                .data(DataSpec::bytes(&[2])),
+        );
+
+    let addrs = spec.static_addresses();
+    assert!(addrs.contains(&solana_system_interface::program::ID), "system program from prefix tip");
+    assert!(addrs.iter().any(|pk| pk.to_string() == "ComputeBudget111111111111111111111111111111"), "compute budget program from prefix");
+    assert!(addrs.contains(&program_a), "ix program a");
+    assert!(addrs.contains(&program_b), "ix program b");
+    assert!(addrs.contains(&shared_fixed), "shared fixed account");
+    assert!(addrs.contains(&only_in_b), "only_in_b fixed account");
+    assert!(!addrs.contains(&payer), "payer must not appear");
+    let shared_count = addrs.iter().filter(|pk| **pk == shared_fixed).count();
+    assert_eq!(shared_count, 1, "dedup of shared_fixed");
+    let sysprog_count = addrs.iter().filter(|pk| **pk == solana_system_interface::program::ID).count();
+    assert_eq!(sysprog_count, 1, "dedup of system_program (no nonce, only tip_transfer)");
+}
+
+#[test]
+fn addresses_missing_from_filters_existing() {
+    use solana_sdk::pubkey::Pubkey;
+    use tx_stamper::spec::account::Acc;
+    use tx_stamper::spec::data::DataSpec;
+    use tx_stamper::spec::instruction::InstructionSpec;
+    use tx_stamper::spec::{MessageVersion, TemplateSpec};
+
+    let payer = Pubkey::new_unique();
+    let prog = Pubkey::new_unique();
+    let a = Pubkey::new_unique();
+    let b = Pubkey::new_unique();
+    let c = Pubkey::new_unique();
+
+    let spec = TemplateSpec::new(payer, MessageVersion::V0).ix(
+        InstructionSpec::new(prog)
+            .account(Acc::fixed(a))
+            .account(Acc::fixed(b))
+            .account(Acc::fixed(c))
+            .data(DataSpec::bytes(&[0])),
+    );
+
+    let existing = vec![a, c];
+    let missing = spec.addresses_missing_from(&existing);
+    assert_eq!(missing.len(), 2);
+    assert!(missing.contains(&prog));
+    assert!(missing.contains(&b));
+    assert!(!missing.contains(&a));
+    assert!(!missing.contains(&c));
+}
