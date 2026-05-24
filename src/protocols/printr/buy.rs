@@ -75,7 +75,6 @@ pub fn buy_spec(payer: Pubkey, base_token_program: TokenProgram) -> TemplateSpec
             Acc::fixed(TOKEN_2022_PROGRAM),
             Acc::fixed(DBC_PROGRAM),
             Acc::fixed(DAMM_V2_PROGRAM),
-            Acc::fixed(solana_sdk::pubkey!("11111111111111111111111111111111")),
         ],
     };
 
