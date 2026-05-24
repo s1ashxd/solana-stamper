@@ -1,4 +1,5 @@
 use std::panic::AssertUnwindSafe;
+use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -346,7 +347,6 @@ fn simulate_damm_v2(rpc: &RpcClient, keypair: &KeypairSigner) {
     let base_mint = DAMM_V2_MINT;
 
     let wsol = WSOL_MINT;
-    let partner = Pubkey::default();
 
     let (mint_a, mint_b) = if base_mint.to_bytes() < wsol.to_bytes() {
         (base_mint, wsol)
@@ -355,20 +355,17 @@ fn simulate_damm_v2(rpc: &RpcClient, keypair: &KeypairSigner) {
     };
     let base_is_a = mint_a == base_mint;
 
-    let pool = pda(
-        &[
-            b"pool",
-            partner.as_ref(),
-            mint_a.as_ref(),
-            mint_b.as_ref(),
-        ],
-        &DAMM_V2_PROGRAM,
-    );
+    let pool = if let Ok(s) = std::env::var("DAMM_POOL") {
+        Pubkey::from_str(&s).expect("DAMM_POOL parse")
+    } else if base_mint.to_string() == "6VTv46gGe3e5jxEpCfwsNZUDMtJw7ssQif5PntXhHyAV" {
+        solana_sdk::pubkey!("BcFQue8PDT48C1zvRQS6jaTFshW5KsiimvR1CRxyCjij")
+    } else {
+        panic!("no DAMM_POOL env and no hardcoded mapping for mint {base_mint}")
+    };
 
     assert!(
         rpc.get_account(&pool).is_ok(),
-        "DAMM v2 pool not found at derived address {pool} for mint {base_mint}; \
-         check pool seeds or provide address manually"
+        "DAMM v2 pool not found at {pool} for mint {base_mint}"
     );
 
     let vault_a = pda(&[b"token_vault", mint_a.as_ref(), pool.as_ref()], &DAMM_V2_PROGRAM);
@@ -595,6 +592,18 @@ fn simulate_printr(rpc: &RpcClient, keypair: &KeypairSigner) {
             return;
         }
     };
+
+    if let solana_sdk::message::VersionedMessage::V0(msg) = &tx.message {
+        println!("printr static account_keys ({}):", msg.account_keys.len());
+        for (i, k) in msg.account_keys.iter().enumerate() {
+            println!("  [{i}] {k}");
+        }
+        println!("printr address_table_lookups ({}):", msg.address_table_lookups.len());
+        for lut in &msg.address_table_lookups {
+            println!("  table {} writable_indexes={:?} readonly_indexes={:?}",
+                     lut.account_key, lut.writable_indexes, lut.readonly_indexes);
+        }
+    }
 
     let result = rpc.simulate_transaction_with_config(&tx, sim_config());
     print_sim_result("Printr", &result);
