@@ -34,7 +34,7 @@ const PRINTR_MINT: Pubkey =
 const JITO_TIP: Pubkey = solana_sdk::pubkey!("96gYZGLRJq7Tq3wcKqSLwhKf3xn5GHHGzVDqFAjksFnY");
 const PRINTR_PARTNER_CONFIG: Pubkey =
     solana_sdk::pubkey!("A8gMrEPJkacWkcb3DGwtJwTe16HktSEfvwtuDh2MCtck");
-const PRINTR_LUT: Pubkey = solana_sdk::pubkey!("7RKtfATWCe98ChuwecNq8XCzAzfoK3DtZTprFsPMGtio");
+const PRINTR_LUT_ADDR: Pubkey = solana_sdk::pubkey!("7RKtfATWCe98ChuwecNq8XCzAzfoK3DtZTprFsPMGtio");
 const PUMPSWAP_FEE_RECIPIENT: Pubkey =
     solana_sdk::pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
@@ -444,6 +444,17 @@ fn simulate_damm_v2(rpc: &RpcClient, keypair: &KeypairSigner) {
     print_sim_result("DAMM v2", &result);
 }
 
+fn parse_alt_addresses(data: &[u8]) -> Vec<Pubkey> {
+    const HEADER: usize = 56;
+    if data.len() < HEADER {
+        return Vec::new();
+    }
+    data[HEADER..]
+        .chunks_exact(32)
+        .map(|c| Pubkey::new_from_array(c.try_into().unwrap()))
+        .collect()
+}
+
 fn simulate_printr(rpc: &RpcClient, keypair: &KeypairSigner) {
     let payer = keypair.pubkey();
     let telecoin_mint = PRINTR_MINT;
@@ -522,11 +533,23 @@ fn simulate_printr(rpc: &RpcClient, keypair: &KeypairSigner) {
     println!("  damm_position_nft_mint: {damm_position_nft_mint}");
     println!("  damm_position_nft_account: {damm_position_nft_account}");
     println!("  damm_position: {damm_position}");
-    println!("  printr_lut: {PRINTR_LUT}");
+    println!("  printr_lut: {PRINTR_LUT_ADDR}");
     println!("  input_wallet: {input_wallet}");
     println!("  output_wallet: {output_wallet}");
 
-    let spec = tx_stamper::protocols::printr::buy_spec(payer, TokenProgram::Legacy);
+    let alt_data = match rpc.get_account_data(&PRINTR_LUT_ADDR) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("printr: failed to fetch ALT account: {e}");
+            return;
+        }
+    };
+    let printr_lut = tx_stamper::spec::lookup::LookupTable {
+        address: PRINTR_LUT_ADDR,
+        addresses: parse_alt_addresses(&alt_data),
+    };
+
+    let spec = tx_stamper::protocols::printr::buy_spec(payer, TokenProgram::Legacy, printr_lut);
     let tpl = match Template::compile(spec) {
         Ok(t) => t,
         Err(e) => {

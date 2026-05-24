@@ -4,12 +4,17 @@ use solana_sdk::pubkey::Pubkey;
 use tx_stamper::protocols::common::TokenProgram;
 use tx_stamper::protocols::printr::buy_spec;
 use tx_stamper::protocols::printr::sell_spec;
+use tx_stamper::spec::lookup::LookupTable;
 use tx_stamper::template::Template;
 
 #[test]
 fn printr_buy_spec_compiles_with_lut() {
     let payer = Pubkey::new_unique();
-    let spec = buy_spec(payer, TokenProgram::Legacy);
+    let lut = LookupTable {
+        address: Pubkey::new_unique(),
+        addresses: vec![Pubkey::new_unique(); 10],
+    };
+    let spec = buy_spec(payer, TokenProgram::Legacy, lut);
     let tpl = Template::compile(spec).expect("compile failed");
     let names: Vec<&str> = tpl.slot_names().collect();
     for expected in [
@@ -44,7 +49,11 @@ fn printr_buy_spec_compiles_with_lut() {
 #[test]
 fn printr_sell_spec_compiles_with_lut() {
     let payer = Pubkey::new_unique();
-    let spec = sell_spec(payer, TokenProgram::Legacy);
+    let lut = LookupTable {
+        address: Pubkey::new_unique(),
+        addresses: vec![Pubkey::new_unique(); 10],
+    };
+    let spec = sell_spec(payer, TokenProgram::Legacy, lut);
     let tpl = Template::compile(spec).expect("compile failed");
     let names: Vec<&str> = tpl.slot_names().collect();
     for expected in [

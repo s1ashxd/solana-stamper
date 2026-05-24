@@ -4,15 +4,15 @@ use crate::protocols::common::{TOKEN_PROGRAM, WSOL_MINT, TokenProgram};
 use crate::spec::account::Acc;
 use crate::spec::data::DataSpec;
 use crate::spec::instruction::InstructionSpec;
-use crate::spec::lookup::{AddressSource, LookupTableSpec};
+use crate::spec::lookup::LookupTable;
 use crate::spec::prefix::{ComputeBudgetSlots, PrefixOptions, TipTransferSlots};
 use crate::spec::{MessageVersion, TemplateSpec};
 
-use super::constants::{DAMM_V2_PROGRAM, DBC_PROGRAM, PRINTR_ALT_KEYS, PRINTR_ALT_TABLE, PRINTR_PROGRAM, PRINTR_SWAP_DISC, SWAP_INTENT_SELL_TELECOIN};
+use super::constants::{DAMM_V2_PROGRAM, DBC_PROGRAM, PRINTR_PROGRAM, PRINTR_SWAP_DISC, SWAP_INTENT_SELL_TELECOIN};
 use super::pda::{damm_event_authority, dbc_event_authority, printr_authority};
 
 #[must_use]
-pub fn sell_spec(payer: Pubkey, base_token_program: TokenProgram) -> TemplateSpec {
+pub fn sell_spec(payer: Pubkey, base_token_program: TokenProgram, lut: LookupTable) -> TemplateSpec {
     let base_tp = base_token_program.id();
 
     let prefix = PrefixOptions::default()
@@ -63,11 +63,6 @@ pub fn sell_spec(payer: Pubkey, base_token_program: TokenProgram) -> TemplateSpe
         .account(Acc::fixed(DAMM_V2_PROGRAM))
         .account(Acc::fixed(solana_sdk::pubkey!("11111111111111111111111111111111")))
         .data(data);
-
-    let lut = LookupTableSpec {
-        address: AddressSource::Fixed(PRINTR_ALT_TABLE),
-        keys: PRINTR_ALT_KEYS.iter().map(|pk| Acc::fixed(*pk)).collect(),
-    };
 
     TemplateSpec::new(payer, MessageVersion::V0)
         .prefix(prefix)

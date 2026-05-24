@@ -9,7 +9,7 @@ pub mod prefix;
 pub mod slot;
 
 use crate::spec::instruction::InstructionSpec;
-use crate::spec::lookup::LookupTableSpec;
+use crate::spec::lookup::LookupTable;
 use crate::spec::prefix::PrefixOptions;
 
 #[derive(Debug, Clone, Copy)]
@@ -24,7 +24,7 @@ pub struct TemplateSpec {
     pub additional_signers: SmallVec<[&'static str; 2]>,
     pub prefix: PrefixOptions,
     pub ixs: Vec<InstructionSpec>,
-    pub luts: Vec<LookupTableSpec>,
+    pub luts: Vec<LookupTable>,
 }
 
 impl TemplateSpec {
@@ -59,7 +59,7 @@ impl TemplateSpec {
     }
 
     #[must_use]
-    pub fn lut(mut self, l: LookupTableSpec) -> Self {
+    pub fn lut(mut self, l: LookupTable) -> Self {
         self.luts.push(l);
         self
     }

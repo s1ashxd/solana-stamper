@@ -16,7 +16,7 @@ use solana_sdk::pubkey::Pubkey;
 use tx_stamper::spec::account::Acc;
 use tx_stamper::spec::data::{DataPiece, DataSpec};
 use tx_stamper::spec::instruction::InstructionSpec;
-use tx_stamper::spec::lookup::{AddressSource, LookupTableSpec};
+use tx_stamper::spec::lookup::LookupTable;
 use tx_stamper::spec::prefix::{ComputeBudgetSlots, PrefixOptions};
 use tx_stamper::spec::{MessageVersion, TemplateSpec};
 
@@ -81,12 +81,12 @@ fn prefix_with_compute_budget() {
 }
 
 #[test]
-fn lookup_table_address_source() {
+fn lookup_table_construct() {
     let pk = solana_sdk::pubkey::Pubkey::new_unique();
-    let _ = AddressSource::Fixed(pk);
-    let _ = LookupTableSpec {
-        address: AddressSource::Fixed(pk),
-        keys: Vec::new(),
+    let addr = solana_sdk::pubkey::Pubkey::new_unique();
+    let _ = LookupTable {
+        address: pk,
+        addresses: vec![addr],
     };
 }
 
