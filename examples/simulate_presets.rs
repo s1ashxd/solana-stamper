@@ -569,7 +569,6 @@ fn simulate_printr(rpc: &RpcClient, keypair: &KeypairSigner) {
         .set("damm_position_nft_mint", damm_position_nft_mint)
         .set("damm_position_nft_account", damm_position_nft_account)
         .set("damm_position", damm_position)
-        .set("printr_lut", PRINTR_LUT)
         .set("amount", 10_000u64)
         .set("sqrt_price", u128::MAX)
         .set("cu_limit", 200_000u32)

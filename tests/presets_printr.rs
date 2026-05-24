@@ -13,7 +13,6 @@ fn printr_buy_spec_compiles_with_lut() {
     let tpl = Template::compile(spec).expect("compile failed");
     let names: Vec<&str> = tpl.slot_names().collect();
     for expected in [
-        "printr_lut",
         "mint",
         "input_wallet",
         "output_wallet",
@@ -49,7 +48,6 @@ fn printr_sell_spec_compiles_with_lut() {
     let tpl = Template::compile(spec).expect("compile failed");
     let names: Vec<&str> = tpl.slot_names().collect();
     for expected in [
-        "printr_lut",
         "mint",
         "input_wallet",
         "output_wallet",
